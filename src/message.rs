@@ -1,5 +1,8 @@
 
 use std::collections::HashMap;
+use std::io::Cursor;
+
+use byteorder::{BigEndian, ReadBytesExt};
 
 pub struct Property;
 
@@ -82,4 +85,27 @@ pub struct MessageExt {
     body_crc: i32,
     reconsume_times: u32,
     prepared_transaction_offset: u64,
+}
+
+impl MessageExt {
+    pub fn from_buffer(input: &[u8]) -> Vec<Self> {
+        let input_len = input.len() as u64;
+        let mut rdr = Cursor::new(input);
+        let mut msgs = Vec::new();
+        while rdr.position() < input_len {
+            let store_size = rdr.read_i32::<BigEndian>().unwrap();
+            let magic_code = rdr.read_i32::<BigEndian>().unwrap();
+            if magic_code != -626843481 {
+                // TODO: check
+            }
+            let body_crc = rdr.read_i32::<BigEndian>().unwrap();
+            let queue_id = rdr.read_i32::<BigEndian>().unwrap();
+            let flag = rdr.read_i32::<BigEndian>().unwrap();
+            let queue_offset = rdr.read_i64::<BigEndian>().unwrap();
+            let physic_offset  = rdr.read_i64::<BigEndian>().unwrap();
+            let sys_flag  = rdr.read_i32::<BigEndian>().unwrap();
+            let born_timestamp = rdr.read_i64::<BigEndian>().unwrap();
+        }
+        msgs
+    }
 }
