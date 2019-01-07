@@ -1,0 +1,12 @@
+[package]
+name = "rocketmq"
+version = "0.1.0"
+authors = ["messense <messense@icloud.com>"]
+edition = "2018"
+
+[dependencies]
+byteorder = "1.2.7"
+serde_json = "1.0.34"
+serde = "1.0.84"
+serde_derive = "1.0.84"
+flate2 = { version = "1.0.6", default-features = false, features = ["rust_backend"] }
