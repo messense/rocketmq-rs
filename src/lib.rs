@@ -1,5 +1,6 @@
 
 mod message;
+mod protocol;
 
 #[cfg(test)]
 mod tests {
