@@ -1,12 +1,13 @@
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{Read, Write, Cursor};
 
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
+const _LENGTH: usize = 4;
 const _HEADER_LENGTH: usize = 4;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Header {
     code: isize,
     language: String,
@@ -41,6 +42,27 @@ impl RemoteCommand {
     }
 
     pub fn from_buffer(input: &[u8]) -> Self {
-        unimplemented!()
+        let mut rdr = Cursor::new(input);
+        let length = rdr.read_i32::<BigEndian>().unwrap();
+        let header_len = rdr.read_i32::<BigEndian>().unwrap();
+        let mut header_buf = Vec::with_capacity(header_len as usize);
+        rdr.read_exact(&mut header_buf).unwrap();
+        let header: Header = serde_json::from_slice(&header_buf).unwrap();
+        let body_len = length as usize - _HEADER_LENGTH - header_len as usize;
+        let body = {
+            if body_len > 0 {
+                let mut body_buf = Vec::with_capacity(body_len);
+                rdr.read_exact(&mut body_buf).unwrap();
+                body_buf
+            } else {
+                Vec::new()
+            }
+        };
+        Self {
+            length,
+            header_length: header_len,
+            header,
+            body,
+        }
     }
 }
