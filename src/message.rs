@@ -44,7 +44,7 @@ pub struct MessageQueue {
 pub struct Message {
     topic: String,
     flag: i32,
-    properties: HashMap<&'static str, String>,
+    properties: HashMap<String, String>,
     body: Vec<u8>,
     transaction_id: String,
 }
@@ -53,15 +53,15 @@ impl Message {
     pub fn new(topic: String, tags: String, keys: String, flag: i32, body: Vec<u8>, wait_store_msg_ok: bool) -> Message {
         let mut props = HashMap::new();
         if !tags.is_empty() {
-            props.insert(Property::TAGS, tags);
+            props.insert(Property::TAGS.to_string(), tags);
         }
         if !keys.is_empty() {
-            props.insert(Property::KEYS, keys);
+            props.insert(Property::KEYS.to_string(), keys);
         }
         if wait_store_msg_ok {
-            props.insert(Property::WAIT_STORE_MSG_OK, "true".to_string());
+            props.insert(Property::WAIT_STORE_MSG_OK.to_string(), "true".to_string());
         } else {
-            props.insert(Property::WAIT_STORE_MSG_OK, "false".to_string());
+            props.insert(Property::WAIT_STORE_MSG_OK.to_string(), "false".to_string());
         }
         Message {
             topic,
@@ -118,11 +118,11 @@ impl MessageExt {
 
             // Body
             let body_len = rdr.read_i32::<BigEndian>().unwrap();
-            if body_len > 0 {
-                let mut body = Vec::with_capacity(body_len as usize);
-                rdr.read_exact(&mut body).unwrap();
-                // decompress
-                let body = {
+            let body = {
+                if body_len > 0 {
+                    let mut body = Vec::with_capacity(body_len as usize);
+                    rdr.read_exact(&mut body).unwrap();
+                    // decompress
                     if true {
                         let mut decoder = ZlibDecoder::new(&body[..]);
                         let mut body_buf = Vec::new();
@@ -131,8 +131,10 @@ impl MessageExt {
                     } else {
                         body
                     }
-                };
-            }
+                } else {
+                    Vec::new()
+                }
+            };
 
             let topic_len = rdr.read_u8().unwrap();
             let mut topic_buf = Vec::with_capacity(topic_len as usize);
@@ -140,21 +142,46 @@ impl MessageExt {
             let topic = String::from_utf8(topic_buf).unwrap();
 
             let properties_len = rdr.read_i16::<BigEndian>().unwrap();
-            if properties_len > 0 {
-                let mut properties_buf = Vec::with_capacity(properties_len as usize);
-                rdr.read_exact(&mut properties_buf).unwrap();
-                let properties_str = String::from_utf8(properties_buf).unwrap();
-                let properties = Self::parse_properties(&properties_str);
-            }
+            let properties = {
+                if properties_len > 0 {
+                    let mut properties_buf = Vec::with_capacity(properties_len as usize);
+                    rdr.read_exact(&mut properties_buf).unwrap();
+                    let properties_str = String::from_utf8(properties_buf).unwrap();
+                    Self::parse_properties(&properties_str)
+                } else {
+                    HashMap::new()
+                }
+            };
 
+            let msg = MessageExt {
+                message: Message {
+                    topic,
+                    flag,
+                    properties,
+                    body,
+                    transaction_id: String::new()
+                },
+                queue_id,
+                store_size,
+                queue_offset,
+                sys_flag,
+                born_timestamp,
+                store_timestamp,
+                msg_id: String::new(),
+                commit_log_offset: physic_offset,
+                body_crc,
+                reconsume_times,
+                prepared_transaction_offset,
+            };
+            msgs.push(msg);
         }
         msgs
     }
 
     fn parse_properties(prop_str: &str) -> HashMap<String, String> {
         let mut props = HashMap::new();
-        for item in prop_str.split('2') {
-            let kv: Vec<&str> = item.split('1').collect();
+        for item in prop_str.split(char::from(2)) {
+            let kv: Vec<&str> = item.split(char::from(1)).collect();
             if kv.len() == 2 {
                 props.insert(kv[0].to_string(), kv[1].to_string());
             }
