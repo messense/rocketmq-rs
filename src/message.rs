@@ -1,8 +1,8 @@
 
 use std::collections::HashMap;
-use std::io::{Read, Cursor};
+use std::io::{Read, Write, Cursor};
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::read::ZlibDecoder;
 
 pub struct Property;
@@ -70,6 +70,19 @@ impl Message {
             properties: props,
             transaction_id: String::new(),
         }
+    }
+
+    fn get_unique_key(&self) -> Option<String> {
+        self.properties
+            .get(Property::UNIQ_CLIENT_MSG_ID_KEY)
+            .cloned()
+            .and_then(|val| {
+                if val.is_empty() {
+                    None
+                } else {
+                    Some(val)
+                }
+            })
     }
 }
 
@@ -153,27 +166,31 @@ impl MessageExt {
                 }
             };
 
-            let msg = MessageExt {
-                message: Message {
-                    topic,
-                    flag,
-                    properties,
-                    body,
-                    transaction_id: String::new()
-                },
+            let msg = Message {
+                topic,
+                flag,
+                properties,
+                body,
+                transaction_id: String::new()
+            };
+            let msg_id = msg.get_unique_key().unwrap_or_else(|| {
+                Self::get_message_offset_id(store_host_buf, store_host_port, physic_offset)
+            });
+            let msg_ex = MessageExt {
+                message: msg,
                 queue_id,
                 store_size,
                 queue_offset,
                 sys_flag,
                 born_timestamp,
                 store_timestamp,
-                msg_id: String::new(),
+                msg_id,
                 commit_log_offset: physic_offset,
                 body_crc,
                 reconsume_times,
                 prepared_transaction_offset,
             };
-            msgs.push(msg);
+            msgs.push(msg_ex);
         }
         msgs
     }
@@ -187,5 +204,13 @@ impl MessageExt {
             }
         }
         props
+    }
+
+    fn get_message_offset_id(store_host: [u8; 4], port: i32, commit_offset: i64) -> String {
+        let mut wtr = Vec::new();
+        wtr.write_all(&store_host).unwrap();
+        wtr.write_i32::<BigEndian>(port).unwrap();
+        wtr.write_i64::<BigEndian>(commit_offset).unwrap();
+        hex::encode(wtr)
     }
 }
