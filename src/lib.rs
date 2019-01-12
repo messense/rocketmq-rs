@@ -1,6 +1,7 @@
 
 mod message;
 mod protocol;
+mod route;
 
 #[cfg(test)]
 mod tests {
