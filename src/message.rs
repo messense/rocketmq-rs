@@ -1,8 +1,9 @@
 
 use std::collections::HashMap;
-use std::io::Cursor;
+use std::io::{Read, Cursor};
 
 use byteorder::{BigEndian, ReadBytesExt};
+use flate2::read::ZlibDecoder;
 
 pub struct Property;
 
@@ -74,17 +75,17 @@ impl Message {
 
 pub struct MessageExt {
     message: Message,
-    queue_id: u32,
-    store_size: u32,
-    queue_offset: u64,
+    queue_id: i32,
+    store_size: i32,
+    queue_offset: i64,
     sys_flag: i32,
     born_timestamp: i64,
     store_timestamp: i64,
     msg_id: String,
-    commit_log_offset: u64,
+    commit_log_offset: i64,
     body_crc: i32,
-    reconsume_times: u32,
-    prepared_transaction_offset: u64,
+    reconsume_times: i32,
+    prepared_transaction_offset: i64,
 }
 
 impl MessageExt {
@@ -105,7 +106,59 @@ impl MessageExt {
             let physic_offset  = rdr.read_i64::<BigEndian>().unwrap();
             let sys_flag  = rdr.read_i32::<BigEndian>().unwrap();
             let born_timestamp = rdr.read_i64::<BigEndian>().unwrap();
+            let mut born_host_buf = [0u8; 4];
+            rdr.read_exact(&mut born_host_buf).unwrap();
+            let born_host_port = rdr.read_i32::<BigEndian>().unwrap();
+            let store_timestamp = rdr.read_i64::<BigEndian>().unwrap();
+            let mut store_host_buf = [0u8; 4];
+            rdr.read_exact(&mut store_host_buf).unwrap();
+            let store_host_port = rdr.read_i32::<BigEndian>().unwrap();
+            let reconsume_times = rdr.read_i32::<BigEndian>().unwrap();
+            let prepared_transaction_offset = rdr.read_i64::<BigEndian>().unwrap();
+
+            // Body
+            let body_len = rdr.read_i32::<BigEndian>().unwrap();
+            if body_len > 0 {
+                let mut body = Vec::with_capacity(body_len as usize);
+                rdr.read_exact(&mut body).unwrap();
+                // decompress
+                let body = {
+                    if true {
+                        let mut decoder = ZlibDecoder::new(&body[..]);
+                        let mut body_buf = Vec::new();
+                        decoder.read_to_end(&mut body_buf).unwrap();
+                        body_buf
+                    } else {
+                        body
+                    }
+                };
+            }
+
+            let topic_len = rdr.read_u8().unwrap();
+            let mut topic_buf = Vec::with_capacity(topic_len as usize);
+            rdr.read_exact(&mut topic_buf).unwrap();
+            let topic = String::from_utf8(topic_buf).unwrap();
+
+            let properties_len = rdr.read_i16::<BigEndian>().unwrap();
+            if properties_len > 0 {
+                let mut properties_buf = Vec::with_capacity(properties_len as usize);
+                rdr.read_exact(&mut properties_buf).unwrap();
+                let properties_str = String::from_utf8(properties_buf).unwrap();
+                let properties = Self::parse_properties(&properties_str);
+            }
+
         }
         msgs
+    }
+
+    fn parse_properties(prop_str: &str) -> HashMap<String, String> {
+        let mut props = HashMap::new();
+        for item in prop_str.split('2') {
+            let kv: Vec<&str> = item.split('1').collect();
+            if kv.len() == 2 {
+                props.insert(kv[0].to_string(), kv[1].to_string());
+            }
+        }
+        props
     }
 }
