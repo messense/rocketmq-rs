@@ -233,6 +233,7 @@ impl MessageExt {
 
 #[cfg(test)]
 mod test {
+    use std::net::{Ipv4Addr, SocketAddrV4};
     use super::MessageExt;
 
     #[test]
@@ -248,5 +249,19 @@ mod test {
             2, 99, 1, 51, 46, 49, 52, 2
         ];
         let msgs = MessageExt::from_buffer(&bytes[..]);
+        assert_eq!(1, msgs.len());
+        let msg = &msgs[0];
+        assert_eq!("abc", msg.message.topic);
+        assert_eq!(b"hello!q!", &msg.message.body[..]);
+        assert_eq!(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0), msg.born_host);
+        assert_eq!(SocketAddrV4::new(Ipv4Addr::new(192, 168, 2, 248), 0), msg.store_host);
+        assert_eq!(123456, msg.commit_log_offset);
+        assert_eq!(0, msg.prepared_transaction_offset);
+        assert_eq!(0, msg.queue_id);
+        assert_eq!(123, msg.queue_offset);
+        assert_eq!(0, msg.reconsume_times);
+        assert_eq!("123", &msg.message.properties["a"]);
+        assert_eq!("hello", &msg.message.properties["b"]);
+        assert_eq!("3.14", &msg.message.properties["c"]);
     }
 }
