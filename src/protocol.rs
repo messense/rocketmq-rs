@@ -34,7 +34,7 @@ impl RemoteCommand {
         let length = _HEADER_LENGTH + header_len + self.body.len();
         wtr.write_i32::<BigEndian>(length as i32).unwrap();
         wtr.write_i32::<BigEndian>(header_len as i32).unwrap();
-        wtr.write_all(&header_bytes);
+        wtr.write_all(&header_bytes).unwrap();
         if !self.body.is_empty() {
             wtr.write_all(&self.body).unwrap();
         }
@@ -45,13 +45,13 @@ impl RemoteCommand {
         let mut rdr = Cursor::new(input);
         let length = rdr.read_i32::<BigEndian>().unwrap();
         let header_len = rdr.read_i32::<BigEndian>().unwrap();
-        let mut header_buf = Vec::with_capacity(header_len as usize);
+        let mut header_buf = vec![0; header_len as usize];
         rdr.read_exact(&mut header_buf).unwrap();
         let header: Header = serde_json::from_slice(&header_buf).unwrap();
         let body_len = length as usize - _HEADER_LENGTH - header_len as usize;
         let body = {
             if body_len > 0 {
-                let mut body_buf = Vec::with_capacity(body_len);
+                let mut body_buf = vec![0; body_len];
                 rdr.read_exact(&mut body_buf).unwrap();
                 body_buf
             } else {
