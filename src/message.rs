@@ -1,6 +1,7 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write, Cursor};
+use std::net::{Ipv4Addr, SocketAddrV4};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::read::ZlibDecoder;
@@ -92,7 +93,9 @@ pub struct MessageExt {
     store_size: i32,
     queue_offset: i64,
     sys_flag: i32,
+    born_host: SocketAddrV4,
     born_timestamp: i64,
+    store_host: SocketAddrV4,
     store_timestamp: i64,
     msg_id: String,
     commit_log_offset: i64,
@@ -122,10 +125,19 @@ impl MessageExt {
             let mut born_host_buf = [0u8; 4];
             rdr.read_exact(&mut born_host_buf).unwrap();
             let born_host_port = rdr.read_i32::<BigEndian>().unwrap();
+            let born_host = SocketAddrV4::new(
+                Ipv4Addr::new(born_host_buf[0], born_host_buf[1], born_host_buf[2], born_host_buf[3]),
+                born_host_port as u16
+            );
             let store_timestamp = rdr.read_i64::<BigEndian>().unwrap();
             let mut store_host_buf = [0u8; 4];
             rdr.read_exact(&mut store_host_buf).unwrap();
             let store_host_port = rdr.read_i32::<BigEndian>().unwrap();
+            let store_host = SocketAddrV4::new(
+                Ipv4Addr::new(store_host_buf[0], store_host_buf[1], store_host_buf[2], store_host_buf[3]),
+                store_host_port as u16
+            );
+
             let reconsume_times = rdr.read_i32::<BigEndian>().unwrap();
             let prepared_transaction_offset = rdr.read_i64::<BigEndian>().unwrap();
 
@@ -182,7 +194,9 @@ impl MessageExt {
                 store_size,
                 queue_offset,
                 sys_flag,
+                born_host,
                 born_timestamp,
+                store_host,
                 store_timestamp,
                 msg_id,
                 commit_log_offset: physic_offset,
