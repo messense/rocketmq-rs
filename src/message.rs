@@ -42,6 +42,7 @@ pub struct MessageQueue {
     queue_id: u32,
 }
 
+#[derive(Debug)]
 pub struct Message {
     topic: String,
     flag: i32,
@@ -87,6 +88,7 @@ impl Message {
     }
 }
 
+#[derive(Debug)]
 pub struct MessageExt {
     message: Message,
     queue_id: i32,
@@ -145,10 +147,10 @@ impl MessageExt {
             let body_len = rdr.read_i32::<BigEndian>().unwrap();
             let body = {
                 if body_len > 0 {
-                    let mut body = Vec::with_capacity(body_len as usize);
+                    let mut body = vec![0; body_len as usize];
                     rdr.read_exact(&mut body).unwrap();
                     // decompress
-                    if true {
+                    if false {
                         let mut decoder = ZlibDecoder::new(&body[..]);
                         let mut body_buf = Vec::new();
                         decoder.read_to_end(&mut body_buf).unwrap();
@@ -162,14 +164,14 @@ impl MessageExt {
             };
 
             let topic_len = rdr.read_u8().unwrap();
-            let mut topic_buf = Vec::with_capacity(topic_len as usize);
+            let mut topic_buf = vec![0; topic_len as usize];
             rdr.read_exact(&mut topic_buf).unwrap();
             let topic = String::from_utf8(topic_buf).unwrap();
 
             let properties_len = rdr.read_i16::<BigEndian>().unwrap();
             let properties = {
                 if properties_len > 0 {
-                    let mut properties_buf = Vec::with_capacity(properties_len as usize);
+                    let mut properties_buf = vec![0; properties_len as usize];
                     rdr.read_exact(&mut properties_buf).unwrap();
                     let properties_str = String::from_utf8(properties_buf).unwrap();
                     Self::parse_properties(&properties_str)
@@ -226,5 +228,25 @@ impl MessageExt {
         wtr.write_i32::<BigEndian>(port).unwrap();
         wtr.write_i64::<BigEndian>(commit_offset).unwrap();
         hex::encode(wtr)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::MessageExt;
+
+    #[test]
+    fn test_decode_message_ext() {
+        let bytes = [
+            0, 0, 0, 123, 218, 163, 32, 167, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 1,
+            226, 64, 0, 0, 0, 0, 0, 0, 1, 104, 106, 154, 142, 143,
+            127, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 168,
+            2, 248, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 8, 104, 101, 108, 108, 111, 33, 113, 33, 3, 97, 98, 99,
+            0, 21, 97, 1, 49, 50, 51, 2, 98, 1, 104, 101, 108, 108, 111,
+            2, 99, 1, 51, 46, 49, 52, 2
+        ];
+        let msgs = MessageExt::from_buffer(&bytes[..]);
     }
 }
