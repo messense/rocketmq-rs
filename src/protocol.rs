@@ -10,7 +10,7 @@ const _HEADER_LENGTH: usize = 4;
 
 static mut GLOBAL_OPAQUE: AtomicIsize = AtomicIsize::new(0);
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Header {
     code: isize,
     language: String,
@@ -21,7 +21,7 @@ pub struct Header {
     ext_fields: HashMap<String, String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct RemoteCommand {
     header: Header,
     body: Vec<u8>,
@@ -78,5 +78,22 @@ impl RemoteCommand {
             header,
             body,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use super::RemoteCommand;
+
+    #[test]
+    fn test_remote_command_encode_decode_roundtrip() {
+        let mut fields = HashMap::new();
+        fields.insert("messageId".to_string(), "123".to_string());
+        fields.insert("offset".to_string(), "456".to_string());
+        let cmd = RemoteCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
+        let encoded = cmd.encode();
+        let decoded = RemoteCommand::from_buffer(&encoded);
+        assert_eq!(cmd, decoded);
     }
 }
