@@ -20,13 +20,26 @@ pub struct Header {
 
 #[derive(Debug)]
 pub struct RemoteCommand {
-    length: i32,
-    header_length: i32,
     header: Header,
     body: Vec<u8>,
 }
 
 impl RemoteCommand {
+    pub fn new(code: isize, flag: isize, remark: String, fields: HashMap<String, String>, body: Vec<u8>) -> Self {
+        Self {
+            header: Header {
+                code: code,
+                language: "OTHER".to_string(),
+                version: 431,
+                opaque: 0,
+                flag,
+                remark,
+                ext_fields: fields,
+            },
+            body,
+        }
+    }
+
     pub fn encode(&self) -> Vec<u8> {
         let mut wtr = Vec::new();
         let header_bytes = serde_json::to_vec(&self.header).unwrap();
@@ -59,8 +72,6 @@ impl RemoteCommand {
             }
         };
         Self {
-            length,
-            header_length: header_len,
             header,
             body,
         }
