@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 use std::io::{Read, Write, Cursor};
+use std::sync::atomic::{AtomicIsize, Ordering};
 
 use serde::{Serialize, Deserialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 const _LENGTH: usize = 4;
 const _HEADER_LENGTH: usize = 4;
+
+static mut GLOBAL_OPAQUE: AtomicIsize = AtomicIsize::new(0);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Header {
@@ -31,7 +34,7 @@ impl RemoteCommand {
                 code: code,
                 language: "OTHER".to_string(),
                 version: 431,
-                opaque: 0,
+                opaque: unsafe { GLOBAL_OPAQUE.fetch_add(1, Ordering::Relaxed) as i32 },
                 flag,
                 remark,
                 ext_fields: fields,
