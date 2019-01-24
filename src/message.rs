@@ -37,9 +37,9 @@ impl Property {
 }
 
 pub struct MessageQueue {
-    topic: String,
-    broker_name: String,
-    queue_id: u32,
+    pub topic: String,
+    pub broker_name: String,
+    pub queue_id: u32,
 }
 
 #[derive(Debug)]
