@@ -1,9 +1,9 @@
 workflow "Build" {
   on = "push"
-  resolves = ["Build"]
+  resolves = ["cargo"]
 }
 
-action "Build" {
+action "cargo" {
   uses = "icepuma/rust-github-action@master"
   args = "cargo build && cargo test"
 }
