@@ -3,6 +3,7 @@ use std::io::{Cursor, Read, Write};
 use std::sync::atomic::{AtomicIsize, Ordering};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
 
 use crate::Error;
@@ -12,10 +13,27 @@ const _HEADER_LENGTH: usize = 4;
 
 static mut GLOBAL_OPAQUE: AtomicIsize = AtomicIsize::new(0);
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TryFromPrimitive)]
+pub enum LanguageCode {
+    JAVA = 0,
+    CPP = 1,
+    DOTNET = 2,
+    PYTHON = 3,
+    DELPHI = 4,
+    ERLANG = 5,
+    RUBY = 6,
+    OTHER = 7,
+    HTTP = 8,
+    GO = 9,
+    PHP = 10,
+    OMS = 11,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Header {
     code: isize,
-    language: String,
+    language: LanguageCode,
     version: isize,
     opaque: i32,
     flag: isize,
@@ -40,7 +58,7 @@ impl RemoteCommand {
         Self {
             header: Header {
                 code: code,
-                language: "Rust".to_string(),
+                language: LanguageCode::OTHER,
                 version: 431,
                 opaque: unsafe { GLOBAL_OPAQUE.fetch_add(1, Ordering::Relaxed) as i32 },
                 flag,
