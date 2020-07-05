@@ -1,5 +1,7 @@
-
+mod client;
+mod error;
 mod message;
 mod protocol;
 mod route;
-mod client;
+
+pub use error::Error;

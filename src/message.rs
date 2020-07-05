@@ -1,6 +1,5 @@
-
 use std::collections::HashMap;
-use std::io::{Read, Write, Cursor};
+use std::io::{Cursor, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -52,7 +51,14 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new(topic: String, tags: String, keys: String, flag: i32, body: Vec<u8>, wait_store_msg_ok: bool) -> Message {
+    pub fn new(
+        topic: String,
+        tags: String,
+        keys: String,
+        flag: i32,
+        body: Vec<u8>,
+        wait_store_msg_ok: bool,
+    ) -> Message {
         let mut props = HashMap::new();
         if !tags.is_empty() {
             props.insert(Property::TAGS.to_string(), tags);
@@ -78,13 +84,7 @@ impl Message {
         self.properties
             .get(Property::UNIQ_CLIENT_MSG_ID_KEY)
             .cloned()
-            .and_then(|val| {
-                if val.is_empty() {
-                    None
-                } else {
-                    Some(val)
-                }
-            })
+            .and_then(|val| if val.is_empty() { None } else { Some(val) })
     }
 }
 
@@ -121,23 +121,33 @@ impl MessageExt {
             let queue_id = rdr.read_i32::<BigEndian>().unwrap();
             let flag = rdr.read_i32::<BigEndian>().unwrap();
             let queue_offset = rdr.read_i64::<BigEndian>().unwrap();
-            let physic_offset  = rdr.read_i64::<BigEndian>().unwrap();
-            let sys_flag  = rdr.read_i32::<BigEndian>().unwrap();
+            let physic_offset = rdr.read_i64::<BigEndian>().unwrap();
+            let sys_flag = rdr.read_i32::<BigEndian>().unwrap();
             let born_timestamp = rdr.read_i64::<BigEndian>().unwrap();
             let mut born_host_buf = [0u8; 4];
             rdr.read_exact(&mut born_host_buf).unwrap();
             let born_host_port = rdr.read_i32::<BigEndian>().unwrap();
             let born_host = SocketAddrV4::new(
-                Ipv4Addr::new(born_host_buf[0], born_host_buf[1], born_host_buf[2], born_host_buf[3]),
-                born_host_port as u16
+                Ipv4Addr::new(
+                    born_host_buf[0],
+                    born_host_buf[1],
+                    born_host_buf[2],
+                    born_host_buf[3],
+                ),
+                born_host_port as u16,
             );
             let store_timestamp = rdr.read_i64::<BigEndian>().unwrap();
             let mut store_host_buf = [0u8; 4];
             rdr.read_exact(&mut store_host_buf).unwrap();
             let store_host_port = rdr.read_i32::<BigEndian>().unwrap();
             let store_host = SocketAddrV4::new(
-                Ipv4Addr::new(store_host_buf[0], store_host_buf[1], store_host_buf[2], store_host_buf[3]),
-                store_host_port as u16
+                Ipv4Addr::new(
+                    store_host_buf[0],
+                    store_host_buf[1],
+                    store_host_buf[2],
+                    store_host_buf[3],
+                ),
+                store_host_port as u16,
             );
 
             let reconsume_times = rdr.read_i32::<BigEndian>().unwrap();
@@ -185,7 +195,7 @@ impl MessageExt {
                 flag,
                 properties,
                 body,
-                transaction_id: String::new()
+                transaction_id: String::new(),
             };
             let msg_id = msg.get_unique_key().unwrap_or_else(|| {
                 Self::get_message_offset_id(store_host_buf, store_host_port, physic_offset)
@@ -233,28 +243,32 @@ impl MessageExt {
 
 #[cfg(test)]
 mod test {
-    use std::net::{Ipv4Addr, SocketAddrV4};
     use super::MessageExt;
+    use std::net::{Ipv4Addr, SocketAddrV4};
 
     #[test]
     fn test_decode_message_ext() {
         let bytes = [
-            0, 0, 0, 123, 218, 163, 32, 167, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 123, 0, 0, 0, 0, 0, 1,
-            226, 64, 0, 0, 0, 0, 0, 0, 1, 104, 106, 154, 142, 143,
-            127, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 168,
-            2, 248, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 8, 104, 101, 108, 108, 111, 33, 113, 33, 3, 97, 98, 99,
-            0, 21, 97, 1, 49, 50, 51, 2, 98, 1, 104, 101, 108, 108, 111,
-            2, 99, 1, 51, 46, 49, 52, 2
+            0, 0, 0, 123, 218, 163, 32, 167, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 123, 0, 0, 0, 0, 0, 1, 226, 64, 0, 0, 0, 0, 0, 0, 1, 104, 106, 154, 142, 143, 127,
+            0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 168, 2, 248, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 104, 101, 108, 108, 111, 33, 113, 33, 3, 97, 98,
+            99, 0, 21, 97, 1, 49, 50, 51, 2, 98, 1, 104, 101, 108, 108, 111, 2, 99, 1, 51, 46, 49,
+            52, 2,
         ];
         let msgs = MessageExt::from_buffer(&bytes[..]);
         assert_eq!(1, msgs.len());
         let msg = &msgs[0];
         assert_eq!("abc", msg.message.topic);
         assert_eq!(b"hello!q!", &msg.message.body[..]);
-        assert_eq!(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0), msg.born_host);
-        assert_eq!(SocketAddrV4::new(Ipv4Addr::new(192, 168, 2, 248), 0), msg.store_host);
+        assert_eq!(
+            SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 0),
+            msg.born_host
+        );
+        assert_eq!(
+            SocketAddrV4::new(Ipv4Addr::new(192, 168, 2, 248), 0),
+            msg.store_host
+        );
         assert_eq!(123456, msg.commit_log_offset);
         assert_eq!(0, msg.prepared_transaction_offset);
         assert_eq!(0, msg.queue_id);

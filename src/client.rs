@@ -36,7 +36,8 @@ impl TopicPublishInfo {
         if broker_name.is_empty() {
             return self.select_message_queue();
         }
-        let mqs: Vec<_> = self.message_queues
+        let mqs: Vec<_> = self
+            .message_queues
             .iter()
             .filter(|&queue| queue.broker_name != broker_name)
             .collect();
