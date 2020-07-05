@@ -3,43 +3,16 @@ use std::io::{Cursor, Read, Write};
 use std::sync::atomic::{AtomicIsize, Ordering};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use num_enum::TryFromPrimitive;
-use serde::{Deserialize, Serialize};
+
+mod header;
 
 use crate::Error;
+use header::{Header, HeaderCodec, LanguageCode};
 
 const _LENGTH: usize = 4;
 const _HEADER_LENGTH: usize = 4;
 
 static mut GLOBAL_OPAQUE: AtomicIsize = AtomicIsize::new(0);
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TryFromPrimitive)]
-pub enum LanguageCode {
-    JAVA = 0,
-    CPP = 1,
-    DOTNET = 2,
-    PYTHON = 3,
-    DELPHI = 4,
-    ERLANG = 5,
-    RUBY = 6,
-    OTHER = 7,
-    HTTP = 8,
-    GO = 9,
-    PHP = 10,
-    OMS = 11,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Header {
-    code: isize,
-    language: LanguageCode,
-    version: isize,
-    opaque: i32,
-    flag: isize,
-    remark: String,
-    ext_fields: HashMap<String, String>,
-}
 
 #[derive(Debug, PartialEq)]
 pub struct RemoteCommand {
@@ -69,9 +42,9 @@ impl RemoteCommand {
         }
     }
 
-    pub fn encode(&self) -> Result<Vec<u8>, Error> {
+    pub fn encode(&self, codec: impl HeaderCodec) -> Result<Vec<u8>, Error> {
         let mut wtr = Vec::new();
-        let header_bytes = serde_json::to_vec(&self.header)?;
+        let header_bytes = codec.encode(&self.header)?;
         let header_len = header_bytes.len();
         let length = _HEADER_LENGTH + header_len + self.body.len();
         wtr.write_i32::<BigEndian>(length as i32)?;
@@ -112,6 +85,7 @@ impl RequestCode {
 
 #[cfg(test)]
 mod test {
+    use super::header::JsonHeaderCodec;
     use super::RemoteCommand;
     use std::collections::HashMap;
 
@@ -121,7 +95,7 @@ mod test {
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
         let cmd = RemoteCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
-        let encoded = cmd.encode().unwrap();
+        let encoded = cmd.encode(JsonHeaderCodec).unwrap();
         let decoded = RemoteCommand::decode(&encoded).unwrap();
         assert_eq!(cmd, decoded);
     }
