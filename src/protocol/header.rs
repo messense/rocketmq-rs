@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::str::FromStr;
 
 use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,47 @@ pub enum LanguageCode {
     GO = 9,
     PHP = 10,
     OMS = 11,
+}
+
+impl FromStr for LanguageCode {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, ()> {
+        let code = match s {
+            "JAVA" => Self::JAVA,
+            "CPP" => Self::CPP,
+            "DOTNET" => Self::DOTNET,
+            "PYTHON" => Self::PYTHON,
+            "DELPHI" => Self::DELPHI,
+            "ERLANG" => Self::ERLANG,
+            "RUBY" => Self::RUBY,
+            "HTTP" => Self::HTTP,
+            "GO" => Self::GO,
+            "PHP" => Self::PHP,
+            "OMS" => Self::OMS,
+            _ => Self::OTHER,
+        };
+        Ok(code)
+    }
+}
+
+impl fmt::Display for LanguageCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            LanguageCode::JAVA => write!(f, "JAVA"),
+            LanguageCode::CPP => write!(f, "CPP"),
+            LanguageCode::DOTNET => write!(f, "DOTNET"),
+            LanguageCode::PYTHON => write!(f, "PYTHON"),
+            LanguageCode::DELPHI => write!(f, "DELPHI"),
+            LanguageCode::ERLANG => write!(f, "ERLANG"),
+            LanguageCode::RUBY => write!(f, "RUBY"),
+            LanguageCode::OTHER => write!(f, "OTHER"),
+            LanguageCode::HTTP => write!(f, "HTTP"),
+            LanguageCode::GO => write!(f, "GO"),
+            LanguageCode::PHP => write!(f, "PHP"),
+            LanguageCode::OMS => write!(f, "OMS"),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
