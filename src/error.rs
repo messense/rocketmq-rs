@@ -1,9 +1,13 @@
+use std::string::FromUtf8Error;
 use std::{error, fmt, io};
 
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
     Json(serde_json::Error),
+    InvalidUtf8(FromUtf8Error),
+    InvalidHeaderCodec,
+    InvalidHeader(String),
 }
 
 impl fmt::Display for Error {
@@ -11,6 +15,9 @@ impl fmt::Display for Error {
         match self {
             Error::Io(err) => err.fmt(f),
             Error::Json(err) => err.fmt(f),
+            Error::InvalidUtf8(err) => err.fmt(f),
+            Error::InvalidHeaderCodec => write!(f, "invalid header codec"),
+            Error::InvalidHeader(ref err) => write!(f, "invalid header: {}", err),
         }
     }
 }
@@ -20,6 +27,8 @@ impl error::Error for Error {
         match self {
             Error::Io(err) => Some(err),
             Error::Json(err) => Some(err),
+            Error::InvalidUtf8(err) => Some(err),
+            _ => None,
         }
     }
 }
@@ -33,5 +42,11 @@ impl From<io::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self::Json(err)
+    }
+}
+
+impl From<FromUtf8Error> for Error {
+    fn from(err: FromUtf8Error) -> Self {
+        Self::InvalidUtf8(err)
     }
 }
