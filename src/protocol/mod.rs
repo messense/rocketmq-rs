@@ -10,10 +10,8 @@ pub mod request;
 pub mod response;
 
 use crate::Error;
-use header::{
-    Header, HeaderCodec, HeaderCodecType, JsonHeaderCodec, LanguageCode, RocketMQHeaderCodec,
-    HEADER_FIXED_LENGTH,
-};
+use header::{Header, HeaderCodec, LanguageCode, HEADER_FIXED_LENGTH};
+pub use header::{HeaderCodecType, JsonHeaderCodec, RocketMQHeaderCodec};
 
 const _LENGTH: usize = 4;
 const RESPONSE_TYPE: i32 = 1;
@@ -22,7 +20,7 @@ static mut GLOBAL_OPAQUE: AtomicIsize = AtomicIsize::new(0);
 
 #[derive(Debug, PartialEq)]
 pub struct RemoteCommand {
-    header: Header,
+    pub(crate) header: Header,
     body: Vec<u8>,
 }
 
@@ -56,6 +54,10 @@ impl RemoteCommand {
             ((source >> 8) & 0xff) as u8,
             (source & 0xff) as u8,
         ]
+    }
+
+    pub fn code(&self) -> i16 {
+        self.header.code
     }
 
     pub fn is_response_type(&self) -> bool {
