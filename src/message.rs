@@ -107,7 +107,7 @@ pub struct MessageExt {
 }
 
 impl MessageExt {
-    pub fn from_buffer(input: &[u8]) -> Vec<Self> {
+    pub fn decode(input: &[u8]) -> Vec<Self> {
         let input_len = input.len() as u64;
         let mut rdr = Cursor::new(input);
         let mut msgs = Vec::new();
@@ -256,7 +256,7 @@ mod test {
             99, 0, 21, 97, 1, 49, 50, 51, 2, 98, 1, 104, 101, 108, 108, 111, 2, 99, 1, 51, 46, 49,
             52, 2,
         ];
-        let msgs = MessageExt::from_buffer(&bytes[..]);
+        let msgs = MessageExt::decode(&bytes[..]);
         assert_eq!(1, msgs.len());
         let msg = &msgs[0];
         assert_eq!("abc", msg.message.topic);
