@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 mod header;
+pub mod request;
+pub mod response;
 
 use crate::Error;
 use header::{
@@ -110,12 +112,6 @@ impl RemoteCommand {
         };
         Ok(Self { header, body })
     }
-}
-
-pub struct RequestCode;
-
-impl RequestCode {
-    pub const SEND_MESSAGE: isize = 10;
 }
 
 #[cfg(test)]
