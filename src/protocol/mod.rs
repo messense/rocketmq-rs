@@ -14,6 +14,7 @@ use header::{
 };
 
 const _LENGTH: usize = 4;
+const RESPONSE_TYPE: i32 = 1;
 
 static mut GLOBAL_OPAQUE: AtomicIsize = AtomicIsize::new(0);
 
@@ -53,6 +54,14 @@ impl RemoteCommand {
             ((source >> 8) & 0xff) as u8,
             (source & 0xff) as u8,
         ]
+    }
+
+    pub fn is_response_type(&self) -> bool {
+        self.header.flag & RESPONSE_TYPE == RESPONSE_TYPE
+    }
+
+    pub fn mark_response_type(&mut self) {
+        self.header.flag |= RESPONSE_TYPE
     }
 
     pub fn encode(&self, codec: impl HeaderCodec) -> Result<Vec<u8>, Error> {
@@ -135,5 +144,18 @@ mod test {
         let encoded = cmd.encode(RocketMQHeaderCodec).unwrap();
         let decoded = RemoteCommand::decode(&encoded).unwrap();
         assert_eq!(cmd, decoded);
+    }
+
+    #[test]
+    fn test_remote_command_type() {
+        let mut fields = HashMap::new();
+        fields.insert("messageId".to_string(), "123".to_string());
+        fields.insert("offset".to_string(), "456".to_string());
+        let mut cmd =
+            RemoteCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
+        assert!(!cmd.is_response_type());
+
+        cmd.mark_response_type();
+        assert!(cmd.is_response_type());
     }
 }
