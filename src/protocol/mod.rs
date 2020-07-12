@@ -4,6 +4,8 @@ use std::io::{Cursor, Read, Write};
 use std::sync::atomic::{AtomicIsize, Ordering};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use bytes::{BufMut, BytesMut};
+use tokio_util::codec::{Decoder, Encoder};
 
 mod header;
 pub mod request;
@@ -113,6 +115,33 @@ impl RemoteCommand {
             }
         };
         Ok(Self { header, body })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MqEncoder;
+
+impl Encoder<RemoteCommand> for MqEncoder {
+    type Error = Error;
+
+    fn encode(&mut self, item: RemoteCommand, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        // FIXME: write into dst directly
+        let bytes = item.encode(RocketMQHeaderCodec)?;
+        dst.extend_from_slice(&bytes);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MqDecoder;
+
+impl Decoder for MqDecoder {
+    type Item = RemoteCommand;
+    type Error = Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let item = RemoteCommand::decode(&src)?;
+        Ok(Some(item))
     }
 }
 
