@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{Cursor, Read, Write};
-use std::sync::atomic::{AtomicIsize, Ordering};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{BufMut, BytesMut};
@@ -18,8 +17,6 @@ pub use header::{HeaderCodecType, JsonHeaderCodec, RocketMQHeaderCodec};
 const _LENGTH: usize = 4;
 const RESPONSE_TYPE: i32 = 1;
 
-static mut GLOBAL_OPAQUE: AtomicIsize = AtomicIsize::new(0);
-
 #[derive(Debug, PartialEq)]
 pub struct RemoteCommand {
     pub(crate) header: Header,
@@ -28,6 +25,7 @@ pub struct RemoteCommand {
 
 impl RemoteCommand {
     pub fn new(
+        opaque: i32,
         code: i16,
         flag: i32,
         remark: String,
@@ -36,10 +34,10 @@ impl RemoteCommand {
     ) -> Self {
         Self {
             header: Header {
-                code: code,
+                code,
                 language: LanguageCode::OTHER,
                 version: 431,
-                opaque: unsafe { GLOBAL_OPAQUE.fetch_add(1, Ordering::Relaxed) as i32 },
+                opaque,
                 flag,
                 remark,
                 ext_fields: fields,
@@ -156,7 +154,14 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let cmd = RemoteCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
+        let cmd = RemoteCommand::new(
+            1,
+            10,
+            0,
+            "remark".to_string(),
+            fields,
+            b"Hello World".to_vec(),
+        );
         let encoded = cmd.encode(JsonHeaderCodec).unwrap();
         let decoded = RemoteCommand::decode(&encoded).unwrap();
         assert_eq!(cmd, decoded);
@@ -167,7 +172,14 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let cmd = RemoteCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
+        let cmd = RemoteCommand::new(
+            1,
+            10,
+            0,
+            "remark".to_string(),
+            fields,
+            b"Hello World".to_vec(),
+        );
         let encoded = cmd.encode(RocketMQHeaderCodec).unwrap();
         let decoded = RemoteCommand::decode(&encoded).unwrap();
         assert_eq!(cmd, decoded);
@@ -178,8 +190,14 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let mut cmd =
-            RemoteCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
+        let mut cmd = RemoteCommand::new(
+            1,
+            10,
+            0,
+            "remark".to_string(),
+            fields,
+            b"Hello World".to_vec(),
+        );
         assert!(!cmd.is_response_type());
 
         cmd.mark_response_type();
