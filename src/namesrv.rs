@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::nsresolver::NsResolver;
@@ -8,6 +9,7 @@ use crate::Error;
 struct NameServersInner {
     servers: Vec<String>,
     index: usize,
+    broker_addresses: HashMap<String, String>,
 }
 
 #[derive(Debug)]
@@ -20,7 +22,11 @@ pub struct NameServers<NR: NsResolver> {
 impl<NR: NsResolver> NameServers<NR> {
     pub fn new(resolver: NR) -> Result<Self, Error> {
         let servers = resolver.resolve()?;
-        let inner = NameServersInner { servers, index: 0 };
+        let inner = NameServersInner {
+            servers,
+            index: 0,
+            broker_addresses: HashMap::new(),
+        };
         // TODO: check addrs
         Ok(Self {
             inner: Mutex::new(inner),
