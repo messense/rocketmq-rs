@@ -117,9 +117,9 @@ impl RemoteCommand {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MqEncoder;
+pub(crate) struct MqCodec;
 
-impl Encoder<RemoteCommand> for MqEncoder {
+impl Encoder<RemoteCommand> for MqCodec {
     type Error = Error;
 
     fn encode(&mut self, item: RemoteCommand, dst: &mut BytesMut) -> Result<(), Self::Error> {
@@ -130,10 +130,7 @@ impl Encoder<RemoteCommand> for MqEncoder {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct MqDecoder;
-
-impl Decoder for MqDecoder {
+impl Decoder for MqCodec {
     type Item = RemoteCommand;
     type Error = Error;
 
