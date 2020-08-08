@@ -5,7 +5,10 @@ use rand::prelude::*;
 use serde::Deserialize;
 
 use crate::message::MessageQueue;
+use crate::permission::Permission;
 use crate::Error;
+
+const MASTER_ID: i64 = 0;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct QueueData {
@@ -68,19 +71,81 @@ impl TopicRouteData {
         let data: TopicRouteData = serde_json::from_str(&s)?;
         Ok(data)
     }
+
+    pub fn to_publish_info(&self, topic: &str) -> TopicPublishInfo {
+        let mut mqs = Vec::new();
+        if !self.order_topic_conf.is_empty() {
+            let brokers = self.order_topic_conf.split(';');
+            for broker in brokers {
+                let mut item = broker.split(':');
+                let broker_name = item.next().unwrap();
+                let nums: u32 = item.next().unwrap().parse().unwrap();
+                for i in 0..nums {
+                    mqs.push(MessageQueue {
+                        topic: topic.to_string(),
+                        broker_name: broker_name.to_string(),
+                        queue_id: i,
+                    });
+                }
+            }
+            return TopicPublishInfo {
+                order_topic: true,
+                have_topic_router_info: false,
+                route_data: self.clone(),
+                message_queues: mqs,
+                queue_index: AtomicUsize::new(0),
+            };
+        }
+        for qd in self.queue_datas.iter().rev() {
+            let writeable = Permission::from_bits(qd.perm)
+                .map(|perm| perm.is_writeable())
+                .unwrap_or(false);
+            if !writeable {
+                continue;
+            }
+            let broker_data = self
+                .broker_datas
+                .iter()
+                .find(|bd| bd.broker_name == qd.broker_name);
+            if let Some(broker_data) = broker_data {
+                if broker_data
+                    .broker_addrs
+                    .get(&MASTER_ID)
+                    .map(|addr| addr == "")
+                    .unwrap_or(true)
+                {
+                    continue;
+                }
+                for i in 0..qd.write_queue_nums {
+                    mqs.push(MessageQueue {
+                        topic: topic.to_string(),
+                        broker_name: qd.broker_name.clone(),
+                        queue_id: i as u32,
+                    });
+                }
+            }
+        }
+        TopicPublishInfo {
+            order_topic: false,
+            have_topic_router_info: false,
+            route_data: self.clone(),
+            message_queues: mqs,
+            queue_index: AtomicUsize::new(0),
+        }
+    }
 }
 
 pub struct TopicPublishInfo {
-    order_topic: bool,
-    have_topic_router_info: bool,
-    message_queues: Vec<MessageQueue>,
-    topic_route_data: TopicRouteData,
-    topic_queue_index: AtomicUsize,
+    pub order_topic: bool,
+    pub have_topic_router_info: bool,
+    pub message_queues: Vec<MessageQueue>,
+    pub route_data: TopicRouteData,
+    pub queue_index: AtomicUsize,
 }
 
 impl TopicPublishInfo {
     pub fn get_queue_id_by_broker(&self, broker_name: &str) -> Option<i32> {
-        self.topic_route_data
+        self.route_data
             .queue_datas
             .iter()
             .find(|&queue| queue.broker_name == broker_name)
@@ -88,7 +153,7 @@ impl TopicPublishInfo {
     }
 
     pub fn select_message_queue(&mut self) -> &MessageQueue {
-        let new_index = self.topic_queue_index.fetch_add(1, Ordering::Relaxed);
+        let new_index = self.queue_index.fetch_add(1, Ordering::Relaxed);
         let index = new_index % self.message_queues.len();
         &self.message_queues[index]
     }
@@ -102,7 +167,7 @@ impl TopicPublishInfo {
             .iter()
             .filter(|&queue| queue.broker_name != broker_name)
             .collect();
-        let new_index = self.topic_queue_index.fetch_add(1, Ordering::Relaxed);
+        let new_index = self.queue_index.fetch_add(1, Ordering::Relaxed);
         let index = new_index % mqs.len();
         &mqs[index]
     }

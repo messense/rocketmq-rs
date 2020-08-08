@@ -35,6 +35,7 @@ impl Property {
     pub const KEY_SEPARATOR: &'static str = " ";
 }
 
+#[derive(Debug, Clone)]
 pub struct MessageQueue {
     pub topic: String,
     pub broker_name: String,

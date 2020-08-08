@@ -193,6 +193,33 @@ impl<NR: NsResolver> NameServer<NR> {
             .collect();
         Ok(mqs)
     }
+
+    pub async fn fetch_publish_message_queues(
+        &self,
+        topic: &str,
+    ) -> Result<Vec<MessageQueue>, Error> {
+        let inner = self.inner.lock().unwrap();
+        if let Some(route_data) = inner.route_data_map.get(topic) {
+            let publish_info = route_data.to_publish_info(topic);
+            Ok(publish_info.message_queues)
+        } else {
+            // Avoid deadlock
+            drop(inner);
+            let route_data = self.query_topic_route_info(topic).await?;
+            let mut inner = self.inner.lock().unwrap();
+            inner
+                .route_data_map
+                .insert(topic.to_string(), route_data.clone());
+            // Add brokers
+            for broker_data in &route_data.broker_datas {
+                inner
+                    .broker_address_map
+                    .insert(broker_data.broker_name.to_string(), broker_data.clone());
+            }
+            let publish_info = route_data.to_publish_info(topic);
+            Ok(publish_info.message_queues)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -230,6 +257,17 @@ mod test {
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
         let res = namesrv
             .fetch_subscribe_message_queues("TopicTest")
+            .await
+            .unwrap();
+        assert!(!res.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_publish_message_queues() {
+        let namesrv =
+            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let res = namesrv
+            .fetch_publish_message_queues("TopicTest")
             .await
             .unwrap();
         assert!(!res.is_empty());
