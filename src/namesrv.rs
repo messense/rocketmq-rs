@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Mutex;
 
+use rand::prelude::*;
+
 use crate::message::MessageQueue;
 use crate::nsresolver::NsResolver;
 use crate::permission::Permission;
@@ -11,7 +13,7 @@ use crate::protocol::{
     RemotingCommand,
 };
 use crate::remoting::RemotingClient;
-use crate::route::{BrokerData, TopicRouteData};
+use crate::route::{BrokerData, TopicRouteData, MASTER_ID};
 use crate::Error;
 
 #[derive(Debug)]
@@ -220,6 +222,27 @@ impl<NR: NsResolver> NameServer<NR> {
             Ok(publish_info.message_queues)
         }
     }
+
+    pub fn find_broker_addr_by_topic(&self, topic: &str) -> Option<String> {
+        let inner = self.inner.lock().unwrap();
+        if let Some(route_data) = inner.route_data_map.get(topic) {
+            if route_data.broker_datas.is_empty() {
+                return None;
+            }
+            let mut rng = thread_rng();
+            let broker_data = route_data.broker_datas.iter().choose(&mut rng).unwrap();
+            if let Some(addr) = broker_data.broker_addrs.get(&MASTER_ID) {
+                if addr.is_empty() {
+                    if let Some(addr) = broker_data.broker_addrs.values().choose(&mut rng) {
+                        return Some(addr.to_string());
+                    }
+                } else {
+                    return Some(addr.to_string());
+                }
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -271,5 +294,14 @@ mod test {
             .await
             .unwrap();
         assert!(!res.is_empty());
+    }
+
+    #[tokio::test]
+    pub async fn find_broker_addr_by_topic() {
+        let namesrv =
+            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        namesrv.update_topic_route_info("TopicTest").await.unwrap();
+        let addr = namesrv.find_broker_addr_by_topic("TopicTest").unwrap();
+        assert!(addr.ends_with(":10911"));
     }
 }

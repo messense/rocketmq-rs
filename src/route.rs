@@ -8,7 +8,7 @@ use crate::message::MessageQueue;
 use crate::permission::Permission;
 use crate::Error;
 
-const MASTER_ID: i64 = 0;
+pub(crate) const MASTER_ID: i64 = 0;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct QueueData {
