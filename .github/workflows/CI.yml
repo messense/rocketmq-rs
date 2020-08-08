@@ -41,11 +41,6 @@ jobs:
             nohup sh bin/mqbroker -n localhost:9876 &
             sleep 15
             bin/mqadmin updateTopic -b '127.0.0.1:10911' –n '127.0.0.1:9876' -t TopicTest
-      - name: Cache cargo build
-        uses: actions/cache@v1
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
