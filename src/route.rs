@@ -7,26 +7,26 @@ use serde::Deserialize;
 use crate::message::MessageQueue;
 use crate::Error;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct QueueData {
     #[serde(rename = "brokerName")]
     pub broker_name: String,
     #[serde(rename = "readQueueNums")]
-    read_queue_nums: i32,
+    pub read_queue_nums: i32,
     #[serde(rename = "writeQueueNums")]
     pub write_queue_nums: i32,
-    perm: i32,
+    pub perm: i32,
     #[serde(default, rename = "topicSyncFlag")]
-    topic_sync_flag: i32,
+    pub topic_sync_flag: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct BrokerData {
-    cluster: String,
+    pub cluster: String,
     #[serde(rename = "brokerName")]
-    broker_name: String,
+    pub broker_name: String,
     #[serde(rename = "brokerAddrs")]
-    broker_addrs: HashMap<i64, String>,
+    pub broker_addrs: HashMap<i64, String>,
 }
 
 impl BrokerData {
@@ -45,16 +45,16 @@ impl BrokerData {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct TopicRouteData {
     #[serde(default, rename = "orderTopicConf")]
-    order_topic_conf: String,
+    pub order_topic_conf: String,
     #[serde(rename = "queueDatas")]
     pub queue_datas: Vec<QueueData>,
     #[serde(rename = "brokerDatas")]
-    broker_datas: Vec<BrokerData>,
+    pub broker_datas: Vec<BrokerData>,
     #[serde(rename = "filterServerTable")]
-    filter_server_table: HashMap<String, Vec<String>>,
+    pub filter_server_table: HashMap<String, Vec<String>>,
 }
 
 impl TopicRouteData {
