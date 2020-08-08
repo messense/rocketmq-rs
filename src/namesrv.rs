@@ -243,6 +243,14 @@ impl<NR: NsResolver> NameServer<NR> {
         }
         None
     }
+
+    pub fn find_broker_addr_by_name(&self, broker_name: &str) -> Option<String> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .broker_address_map
+            .get(broker_name)
+            .and_then(|broker_data| broker_data.broker_addrs.get(&MASTER_ID).cloned())
+    }
 }
 
 #[cfg(test)]
@@ -302,6 +310,17 @@ mod test {
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
         namesrv.update_topic_route_info("TopicTest").await.unwrap();
         let addr = namesrv.find_broker_addr_by_topic("TopicTest").unwrap();
+        assert!(addr.ends_with(":10911"));
+    }
+
+    #[tokio::test]
+    pub async fn find_broker_addr_by_name() {
+        let namesrv =
+            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        namesrv.update_topic_route_info("TopicTest").await.unwrap();
+        let res = namesrv.query_topic_route_info("TopicTest").await.unwrap();
+        let broker_name = res.broker_datas.first().map(|x| &x.broker_name).unwrap();
+        let addr = namesrv.find_broker_addr_by_name(broker_name).unwrap();
         assert!(addr.ends_with(":10911"));
     }
 }
