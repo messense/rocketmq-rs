@@ -682,6 +682,7 @@ dependencies = [
 name = "rocketmq"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "byteorder",
  "bytes",
  "flate2",

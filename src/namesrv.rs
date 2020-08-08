@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Mutex;
 
+use crate::message::MessageQueue;
 use crate::nsresolver::NsResolver;
+use crate::permission::Permission;
 use crate::protocol::{
     request::{GetRouteInfoRequestHeader, RequestCode},
     response::ResponseCode,
@@ -164,6 +166,33 @@ impl<NR: NsResolver> NameServer<NR> {
         new_data.broker_datas.sort_by_key(|k| k.broker_name.clone());
         old_data != new_data
     }
+
+    pub async fn fetch_subscribe_message_queues(
+        &self,
+        topic: &str,
+    ) -> Result<Vec<MessageQueue>, Error> {
+        let route_data = self.query_topic_route_info(topic).await?;
+        let mqs: Vec<MessageQueue> = route_data
+            .queue_datas
+            .into_iter()
+            .flat_map(|queue_data| {
+                let mut mqs = Vec::new();
+                if let Some(perm) = Permission::from_bits(queue_data.perm) {
+                    if perm.is_readable() {
+                        for i in 0..queue_data.read_queue_nums {
+                            mqs.push(MessageQueue {
+                                topic: topic.to_string(),
+                                broker_name: queue_data.broker_name.clone(),
+                                queue_id: i as u32,
+                            })
+                        }
+                    }
+                }
+                mqs
+            })
+            .collect();
+        Ok(mqs)
+    }
 }
 
 #[cfg(test)]
@@ -193,5 +222,16 @@ mod test {
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
         assert!(namesrv.update_topic_route_info("TopicTest").await.unwrap());
         assert!(!namesrv.update_topic_route_info("TopicTest").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_subscribe_message_queues() {
+        let namesrv =
+            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let res = namesrv
+            .fetch_subscribe_message_queues("TopicTest")
+            .await
+            .unwrap();
+        assert!(!res.is_empty());
     }
 }
