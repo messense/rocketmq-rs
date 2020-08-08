@@ -13,7 +13,7 @@ use crate::route::{BrokerData, TopicRouteData};
 use crate::Error;
 
 #[derive(Debug)]
-struct NameServersInner {
+struct NameServerInner {
     servers: Vec<String>,
     index: usize,
     // broker name -> BrokerData
@@ -23,16 +23,16 @@ struct NameServersInner {
 }
 
 #[derive(Debug)]
-pub struct NameServers<NR: NsResolver> {
-    inner: Mutex<NameServersInner>,
+pub struct NameServer<NR: NsResolver> {
+    inner: Mutex<NameServerInner>,
     resolver: NR,
     remoting_client: RemotingClient,
 }
 
-impl<NR: NsResolver> NameServers<NR> {
+impl<NR: NsResolver> NameServer<NR> {
     pub fn new(resolver: NR) -> Result<Self, Error> {
         let servers = resolver.resolve()?;
-        let inner = NameServersInner {
+        let inner = NameServerInner {
             servers,
             index: 0,
             broker_address_map: HashMap::new(),
@@ -63,7 +63,7 @@ impl<NR: NsResolver> NameServers<NR> {
         self.inner.lock().unwrap().servers.is_empty()
     }
 
-    pub fn update(&mut self) -> Result<(), Error> {
+    pub fn update_name_server_address(&mut self) -> Result<(), Error> {
         let mut inner = self.inner.lock().unwrap();
         if let Ok(servers) = self.resolver.resolve() {
             inner.servers = servers;
@@ -173,7 +173,7 @@ mod test {
 
     #[tokio::test]
     async fn test_query_topic_route_info_with_empty_namesrv() {
-        let namesrv = NameServers::new(StaticResolver::new(vec![])).unwrap();
+        let namesrv = NameServer::new(StaticResolver::new(vec![])).unwrap();
         let res = namesrv.query_topic_route_info("test").await;
         assert!(res.is_err());
     }
@@ -181,7 +181,7 @@ mod test {
     #[tokio::test]
     async fn test_query_topic_route_info() {
         let namesrv =
-            NameServers::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
         let res = namesrv.query_topic_route_info("TopicTest").await;
         println!("{:?}", res);
         assert!(!res.is_err());
@@ -190,7 +190,7 @@ mod test {
     #[tokio::test]
     async fn test_update_topic_route_info() {
         let namesrv =
-            NameServers::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
         assert!(namesrv.update_topic_route_info("TopicTest").await.unwrap());
         assert!(!namesrv.update_topic_route_info("TopicTest").await.unwrap());
     }
