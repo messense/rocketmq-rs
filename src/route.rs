@@ -2,11 +2,12 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rand::prelude::*;
-use serde::Serialize;
+use serde::Deserialize;
 
 use crate::message::MessageQueue;
+use crate::Error;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct QueueData {
     #[serde(rename = "brokerName")]
     pub broker_name: String,
@@ -15,11 +16,11 @@ pub struct QueueData {
     #[serde(rename = "writeQueueNums")]
     pub write_queue_nums: i32,
     perm: i32,
-    #[serde(rename = "topicSyncFlag")]
+    #[serde(default, rename = "topicSyncFlag")]
     topic_sync_flag: i32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct BrokerData {
     cluster: String,
     #[serde(rename = "brokerName")]
@@ -44,9 +45,9 @@ impl BrokerData {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize)]
 pub struct TopicRouteData {
-    #[serde(rename = "orderTopicConf")]
+    #[serde(default, rename = "orderTopicConf")]
     order_topic_conf: String,
     #[serde(rename = "queueDatas")]
     pub queue_datas: Vec<QueueData>,
@@ -54,6 +55,19 @@ pub struct TopicRouteData {
     broker_datas: Vec<BrokerData>,
     #[serde(rename = "filterServerTable")]
     filter_server_table: HashMap<String, Vec<String>>,
+}
+
+impl TopicRouteData {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        let mut s = String::from_utf8(bytes.to_vec()).unwrap();
+        // fixup fastjson mess
+        s = s.replace(",0:", ",\"0\":");
+        s = s.replace(",1:", ",\"1\":");
+        s = s.replace("{0:", "{\"0\":");
+        s = s.replace("{1:", "{\"1\":");
+        let data: TopicRouteData = serde_json::from_str(&s)?;
+        Ok(data)
+    }
 }
 
 pub struct TopicPublishInfo {

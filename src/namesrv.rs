@@ -1,8 +1,15 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::Mutex;
 
 use crate::nsresolver::NsResolver;
+use crate::protocol::{
+    request::{GetRouteInfoRequestHeader, RequestCode},
+    response::ResponseCode,
+    RemotingCommand,
+};
 use crate::remoting::RemotingClient;
+use crate::route::TopicRouteData;
 use crate::Error;
 
 #[derive(Debug)]
@@ -58,5 +65,68 @@ impl<NR: NsResolver> NameServers<NR> {
             inner.servers = servers;
         }
         Ok(())
+    }
+
+    pub async fn query_topic_route_info(&self, topic: &str) -> Result<TopicRouteData, Error> {
+        let inner = self.inner.lock().unwrap();
+        if inner.servers.is_empty() {
+            return Err(Error::EmptyNameServers);
+        }
+        let header = GetRouteInfoRequestHeader {
+            topic: topic.to_string(),
+        };
+        for addr in &inner.servers {
+            let cmd = RemotingCommand::with_header(
+                RequestCode::GetRouteInfoByTopic.into(),
+                header.clone(),
+                Vec::new(),
+            );
+            let res = self.remoting_client.invoke(addr, cmd).await;
+            if let Ok(res) = res {
+                match ResponseCode::try_from(res.header.code).unwrap() {
+                    ResponseCode::Success => {
+                        if res.body.is_empty() {
+                            // FIXME: error
+                        }
+                        let route_data = TopicRouteData::from_bytes(&res.body)?;
+                        return Ok(route_data);
+                    }
+                    ResponseCode::TopicNotExist => {
+                        return Err(Error::TopicNotExist(topic.to_string()))
+                    }
+                    _ => {
+                        return Err(Error::ResponseError {
+                            code: res.header.code,
+                            message: res.header.remark.clone(),
+                        })
+                    }
+                }
+            } else {
+                println!("{:?}", res);
+            }
+        }
+        Err(Error::EmptyRouteData)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::nsresolver::StaticResolver;
+
+    #[tokio::test]
+    async fn test_query_topic_route_info_with_empty_namesrv() {
+        let namesrv = NameServers::new(StaticResolver::new(vec![])).unwrap();
+        let res = namesrv.query_topic_route_info("test").await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_query_topic_route_info() {
+        let namesrv =
+            NameServers::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let res = namesrv.query_topic_route_info("TopicTest").await;
+        println!("{:?}", res);
+        assert!(!res.is_err());
     }
 }

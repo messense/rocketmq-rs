@@ -6,7 +6,7 @@ use tokio::sync::oneshot;
 
 use super::connection::Connection;
 use crate::error::{ConnectionError, Error};
-use crate::protocol::RemoteCommand;
+use crate::protocol::RemotingCommand;
 
 enum ConnectionStatus {
     Connected(Arc<Connection>),
@@ -31,7 +31,7 @@ impl RemotingClient {
         }
     }
 
-    pub async fn send(&self, addr: &str, cmd: RemoteCommand) -> Result<RemoteCommand, Error> {
+    pub async fn invoke(&self, addr: &str, cmd: RemotingCommand) -> Result<RemotingCommand, Error> {
         let conn = self.get_connection(addr).await?;
         let sender = conn.sender();
         Ok(sender.send(cmd).await?)

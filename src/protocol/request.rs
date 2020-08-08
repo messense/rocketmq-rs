@@ -102,3 +102,16 @@ impl EncodeRequestHeader for CheckTransactionStateRequestHeader {
         map
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct GetRouteInfoRequestHeader {
+    pub topic: String,
+}
+
+impl EncodeRequestHeader for GetRouteInfoRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("topic".to_string(), self.topic);
+        map
+    }
+}

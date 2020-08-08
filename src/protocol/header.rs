@@ -79,7 +79,9 @@ pub struct Header {
     pub version: i16,
     pub opaque: i32,
     pub flag: i32,
+    #[serde(default)]
     pub remark: String,
+    #[serde(default)]
     pub ext_fields: HashMap<String, String>,
 }
 

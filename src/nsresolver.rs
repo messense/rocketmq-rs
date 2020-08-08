@@ -20,6 +20,23 @@ impl NsResolver for EnvResolver {
 }
 
 #[derive(Debug, Clone)]
+pub struct StaticResolver {
+    addrs: Vec<String>,
+}
+
+impl StaticResolver {
+    pub fn new(addrs: Vec<String>) -> Self {
+        Self { addrs }
+    }
+}
+
+impl NsResolver for StaticResolver {
+    fn resolve(&self) -> Result<Vec<String>, Error> {
+        Ok(self.addrs.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct PassthroughResolver<T: NsResolver> {
     addrs: Vec<String>,
     fallback: T,

@@ -9,18 +9,18 @@ use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::error::{ConnectionError, Error};
-use crate::protocol::{MqCodec, RemoteCommand};
+use crate::protocol::{MqCodec, RemotingCommand};
 
 pub struct ConnectionSender {
-    tx: mpsc::UnboundedSender<RemoteCommand>,
-    registrations_tx: mpsc::UnboundedSender<(i32, oneshot::Sender<RemoteCommand>)>,
+    tx: mpsc::UnboundedSender<RemotingCommand>,
+    registrations_tx: mpsc::UnboundedSender<(i32, oneshot::Sender<RemotingCommand>)>,
     receiver_shutdown: Option<oneshot::Sender<()>>,
 }
 
 impl ConnectionSender {
     pub fn new(
-        tx: mpsc::UnboundedSender<RemoteCommand>,
-        registrations_tx: mpsc::UnboundedSender<(i32, oneshot::Sender<RemoteCommand>)>,
+        tx: mpsc::UnboundedSender<RemotingCommand>,
+        registrations_tx: mpsc::UnboundedSender<(i32, oneshot::Sender<RemotingCommand>)>,
         receiver_shutdown: oneshot::Sender<()>,
     ) -> Self {
         Self {
@@ -30,37 +30,34 @@ impl ConnectionSender {
         }
     }
 
-    pub async fn send(&self, cmd: RemoteCommand) -> Result<RemoteCommand, Error> {
-        let (resolver, response) = oneshot::channel();
-        let response = async {
-            response
-                .await
-                .map_err(|_err| Error::Connection(ConnectionError::Disconnected))
-        };
+    pub async fn send(&self, cmd: RemotingCommand) -> Result<RemotingCommand, Error> {
+        let (sender, receiver) = oneshot::channel();
         match (
-            self.registrations_tx.send((cmd.header.opaque, resolver)),
+            self.registrations_tx.send((cmd.header.opaque, sender)),
             self.tx.send(cmd),
         ) {
-            (Ok(_), Ok(_)) => response.await,
+            (Ok(_), Ok(_)) => receiver
+                .await
+                .map_err(|_err| Error::Connection(ConnectionError::Disconnected)),
             _ => Err(Error::Connection(ConnectionError::Disconnected)),
         }
     }
 }
 
-struct Receiver<S: Stream<Item = Result<RemoteCommand, Error>>> {
+struct Receiver<S: Stream<Item = Result<RemotingCommand, Error>>> {
     inbound: Pin<Box<S>>,
     // internal sender
-    outbound: mpsc::UnboundedSender<RemoteCommand>,
-    pending_requests: HashMap<i32, oneshot::Sender<RemoteCommand>>,
-    registrations: Pin<Box<mpsc::UnboundedReceiver<(i32, oneshot::Sender<RemoteCommand>)>>>,
+    outbound: mpsc::UnboundedSender<RemotingCommand>,
+    pending_requests: HashMap<i32, oneshot::Sender<RemotingCommand>>,
+    registrations: Pin<Box<mpsc::UnboundedReceiver<(i32, oneshot::Sender<RemotingCommand>)>>>,
     shutdown: Pin<Box<oneshot::Receiver<()>>>,
 }
 
-impl<S: Stream<Item = Result<RemoteCommand, Error>>> Receiver<S> {
+impl<S: Stream<Item = Result<RemotingCommand, Error>>> Receiver<S> {
     pub fn new(
         inbound: S,
-        outbound: mpsc::UnboundedSender<RemoteCommand>,
-        registrations: mpsc::UnboundedReceiver<(i32, oneshot::Sender<RemoteCommand>)>,
+        outbound: mpsc::UnboundedSender<RemotingCommand>,
+        registrations: mpsc::UnboundedReceiver<(i32, oneshot::Sender<RemotingCommand>)>,
         shutdown: oneshot::Receiver<()>,
     ) -> Receiver<S> {
         Self {
@@ -73,7 +70,7 @@ impl<S: Stream<Item = Result<RemoteCommand, Error>>> Receiver<S> {
     }
 }
 
-impl<S: Stream<Item = Result<RemoteCommand, Error>>> Future for Receiver<S> {
+impl<S: Stream<Item = Result<RemotingCommand, Error>>> Future for Receiver<S> {
     type Output = Result<(), ()>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -92,6 +89,7 @@ impl<S: Stream<Item = Result<RemoteCommand, Error>>> Future for Receiver<S> {
                 Poll::Pending => break,
             }
         }
+        #[allow(clippy::never_loop)]
         loop {
             match self.inbound.as_mut().poll_next(ctx) {
                 Poll::Ready(Some(Ok(msg))) => {
@@ -102,6 +100,8 @@ impl<S: Stream<Item = Result<RemoteCommand, Error>>> Future for Receiver<S> {
                     } else {
                         // FIXME: what to do?
                     }
+                    // FIXME: namesrv query topic route info 之后会不停地返回 PollReady， why?
+                    return Poll::Pending;
                 }
                 Poll::Ready(None) => return Poll::Ready(Err(())),
                 Poll::Pending => return Poll::Pending,
@@ -134,8 +134,8 @@ impl Connection {
 
     async fn connect<S>(stream: S) -> Result<ConnectionSender, Error>
     where
-        S: Stream<Item = Result<RemoteCommand, Error>>,
-        S: Sink<RemoteCommand, Error = Error>,
+        S: Stream<Item = Result<RemotingCommand, Error>>,
+        S: Sink<RemotingCommand, Error = Error>,
         S: Send + std::marker::Unpin + 'static,
     {
         let (mut sink, stream) = stream.split();

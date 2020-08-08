@@ -13,23 +13,24 @@ pub mod response;
 use crate::Error;
 use header::{Header, HeaderCodec, LanguageCode, HEADER_FIXED_LENGTH};
 pub use header::{HeaderCodecType, JsonHeaderCodec, RocketMQHeaderCodec};
+use request::EncodeRequestHeader;
 
 const _LENGTH: usize = 4;
 const RESPONSE_TYPE: i32 = 1;
 
 #[derive(Debug, PartialEq)]
-pub struct RemoteCommand {
+pub struct RemotingCommand {
     pub(crate) header: Header,
-    body: Vec<u8>,
+    pub(crate) body: Vec<u8>,
 }
 
-impl RemoteCommand {
+impl RemotingCommand {
     pub fn new(
         opaque: i32,
         code: i16,
         flag: i32,
         remark: String,
-        fields: HashMap<String, String>,
+        ext_fields: HashMap<String, String>,
         body: Vec<u8>,
     ) -> Self {
         Self {
@@ -40,10 +41,15 @@ impl RemoteCommand {
                 opaque,
                 flag,
                 remark,
-                ext_fields: fields,
+                ext_fields,
             },
             body,
         }
+    }
+
+    pub fn with_header<H: EncodeRequestHeader>(code: i16, header: H, body: Vec<u8>) -> Self {
+        let ext_fields = header.encode();
+        Self::new(0, code, 0, String::new(), ext_fields, body)
     }
 
     fn encode_codec_type(source: i32, codec: impl HeaderCodec) -> [u8; 4] {
@@ -119,10 +125,10 @@ impl RemoteCommand {
 #[derive(Debug, Clone)]
 pub(crate) struct MqCodec;
 
-impl Encoder<RemoteCommand> for MqCodec {
+impl Encoder<RemotingCommand> for MqCodec {
     type Error = Error;
 
-    fn encode(&mut self, item: RemoteCommand, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: RemotingCommand, dst: &mut BytesMut) -> Result<(), Self::Error> {
         // FIXME: write into dst directly
         let bytes = item.encode(RocketMQHeaderCodec)?;
         dst.extend_from_slice(&bytes);
@@ -131,11 +137,11 @@ impl Encoder<RemoteCommand> for MqCodec {
 }
 
 impl Decoder for MqCodec {
-    type Item = RemoteCommand;
+    type Item = RemotingCommand;
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let item = RemoteCommand::decode(&src)?;
+        let item = RemotingCommand::decode(&src)?;
         Ok(Some(item))
     }
 }
@@ -143,7 +149,7 @@ impl Decoder for MqCodec {
 #[cfg(test)]
 mod test {
     use super::header::{JsonHeaderCodec, RocketMQHeaderCodec};
-    use super::RemoteCommand;
+    use super::RemotingCommand;
     use std::collections::HashMap;
 
     #[test]
@@ -151,7 +157,7 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let cmd = RemoteCommand::new(
+        let cmd = RemotingCommand::new(
             1,
             10,
             0,
@@ -160,7 +166,7 @@ mod test {
             b"Hello World".to_vec(),
         );
         let encoded = cmd.encode(JsonHeaderCodec).unwrap();
-        let decoded = RemoteCommand::decode(&encoded).unwrap();
+        let decoded = RemotingCommand::decode(&encoded).unwrap();
         assert_eq!(cmd, decoded);
     }
 
@@ -169,7 +175,7 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let cmd = RemoteCommand::new(
+        let cmd = RemotingCommand::new(
             1,
             10,
             0,
@@ -178,7 +184,7 @@ mod test {
             b"Hello World".to_vec(),
         );
         let encoded = cmd.encode(RocketMQHeaderCodec).unwrap();
-        let decoded = RemoteCommand::decode(&encoded).unwrap();
+        let decoded = RemotingCommand::decode(&encoded).unwrap();
         assert_eq!(cmd, decoded);
     }
 
@@ -187,7 +193,7 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let mut cmd = RemoteCommand::new(
+        let mut cmd = RemotingCommand::new(
             1,
             10,
             0,
