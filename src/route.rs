@@ -62,13 +62,10 @@ pub struct TopicRouteData {
 
 impl TopicRouteData {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let mut s = String::from_utf8(bytes.to_vec()).unwrap();
+        let s = std::str::from_utf8(bytes).unwrap();
         // fixup fastjson mess
-        s = s.replace(",0:", ",\"0\":");
-        s = s.replace(",1:", ",\"1\":");
-        s = s.replace("{0:", "{\"0\":");
-        s = s.replace("{1:", "{\"1\":");
-        let data: TopicRouteData = serde_json::from_str(&s)?;
+        let json = dirty_json::fix(s);
+        let data: TopicRouteData = serde_json::from_str(&json)?;
         Ok(data)
     }
 

@@ -69,6 +69,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirty-json"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8bf0b2a0706e94d793d7236e079605fdcf777560d65ca299cc3f397507a6cbb"
+dependencies = [
+ "json-tools",
+]
+
+[[package]]
 name = "dtoa"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -244,9 +253,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34f595585f103464d8d2f6e9864682d74c1601fed5e07d62b1c9058dba8246fb"
+checksum = "e91b62f79061a0bc2e046024cb7ba44b08419ed238ecbd9adbd787434b9e8c25"
 dependencies = [
  "autocfg",
 ]
@@ -367,6 +376,12 @@ checksum = "85a7e2c92a4804dd459b86c339278d0fe87cf93757fae222c3fa3ae75458bc73"
 dependencies = [
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "json-tools"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "233ed60f8b0f64b6e630359c9f54efa91859100644a199ed4c5c753d949b45cc"
 
 [[package]]
 name = "kernel32-sys"
@@ -685,6 +700,7 @@ dependencies = [
  "bitflags",
  "byteorder",
  "bytes",
+ "dirty-json",
  "flate2",
  "futures",
  "hex",
