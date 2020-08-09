@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use futures::{
     task::{Context, Poll},
@@ -15,6 +16,7 @@ pub struct ConnectionSender {
     tx: mpsc::UnboundedSender<RemotingCommand>,
     registrations_tx: mpsc::UnboundedSender<(i32, oneshot::Sender<RemotingCommand>)>,
     receiver_shutdown: Option<oneshot::Sender<()>>,
+    opaque_id: AtomicI32,
 }
 
 impl ConnectionSender {
@@ -27,11 +29,14 @@ impl ConnectionSender {
             tx,
             registrations_tx,
             receiver_shutdown: Some(receiver_shutdown),
+            opaque_id: AtomicI32::new(0),
         }
     }
 
     pub async fn send(&self, cmd: RemotingCommand) -> Result<RemotingCommand, Error> {
         let (sender, receiver) = oneshot::channel();
+        let mut cmd = cmd;
+        cmd.header.opaque = self.opaque_id.fetch_add(1, Ordering::SeqCst);
         match (
             self.registrations_tx.send((cmd.header.opaque, sender)),
             self.tx.send(cmd),
@@ -100,8 +105,6 @@ impl<S: Stream<Item = Result<RemotingCommand, Error>>> Future for Receiver<S> {
                     } else {
                         // FIXME: what to do?
                     }
-                    // FIXME: namesrv query topic route info 之后会不停地返回 PollReady， why?
-                    return Poll::Pending;
                 }
                 Poll::Ready(None) => return Poll::Ready(Err(())),
                 Poll::Pending => return Poll::Pending,
@@ -149,10 +152,7 @@ impl Connection {
             receiver_shutdown_rx,
         )));
         tokio::spawn(Box::pin(async move {
-            let mut opaque = 0;
-            while let Some(mut msg) = rx.next().await {
-                msg.header.opaque = opaque;
-                opaque += 1;
+            while let Some(msg) = rx.next().await {
                 if let Err(_e) = sink.send(msg).await {
                     // FIXME: error handling
                     break;
