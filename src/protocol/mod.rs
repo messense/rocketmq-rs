@@ -18,7 +18,7 @@ use request::EncodeRequestHeader;
 const _LENGTH: usize = 4;
 const RESPONSE_TYPE: i32 = 1;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RemotingCommand {
     pub(crate) header: Header,
     pub(crate) body: Vec<u8>,
@@ -153,7 +153,7 @@ mod test {
     use super::{MqCodec, RemotingCommand};
     use bytes::BytesMut;
     use std::collections::HashMap;
-    use tokio_util::codec::Decoder;
+    use tokio_util::codec::{Decoder, Encoder};
 
     #[test]
     fn test_remote_command_json_encode_decode_roundtrip() {
@@ -192,6 +192,26 @@ mod test {
         cmd.encode_into(&mut encoded, RocketMQHeaderCodec).unwrap();
         let mut decoder = MqCodec;
         let decoded = decoder.decode(&mut encoded).unwrap().unwrap();
+        assert_eq!(cmd, decoded);
+    }
+
+    #[test]
+    fn test_remote_command_rocketmq_codec_roundtrip() {
+        let mut fields = HashMap::new();
+        fields.insert("messageId".to_string(), "123".to_string());
+        fields.insert("offset".to_string(), "456".to_string());
+        let cmd = RemotingCommand::new(
+            1,
+            10,
+            0,
+            "remark".to_string(),
+            fields,
+            b"Hello World".to_vec(),
+        );
+        let mut codec = MqCodec;
+        let mut encoded = BytesMut::new();
+        codec.encode(cmd.clone(), &mut encoded);
+        let decoded = codec.decode(&mut encoded).unwrap().unwrap();
         assert_eq!(cmd, decoded);
     }
 

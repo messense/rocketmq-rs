@@ -72,7 +72,7 @@ impl fmt::Display for LanguageCode {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Header {
     pub code: i16,
     pub language: LanguageCode,
