@@ -1,6 +1,7 @@
 use std::fmt;
 
 use bitflags::bitflags;
+use bitflags_serde_shim::impl_serde_for_bitflags;
 
 bitflags! {
     pub struct Permission: i32 {
@@ -10,6 +11,8 @@ bitflags! {
         const INHERIT = 0x1 << 0;
     }
 }
+
+impl_serde_for_bitflags!(Permission);
 
 impl Permission {
     pub fn is_readable(&self) -> bool {

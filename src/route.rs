@@ -18,7 +18,7 @@ pub struct QueueData {
     pub read_queue_nums: i32,
     #[serde(rename = "writeQueueNums")]
     pub write_queue_nums: i32,
-    pub perm: i32,
+    pub perm: Permission,
     #[serde(default, rename = "topicSyncFlag")]
     pub topic_sync_flag: i32,
 }
@@ -94,10 +94,7 @@ impl TopicRouteData {
             };
         }
         for qd in self.queue_datas.iter().rev() {
-            let writeable = Permission::from_bits(qd.perm)
-                .map(|perm| perm.is_writeable())
-                .unwrap_or(false);
-            if !writeable {
+            if !qd.perm.is_writeable() {
                 continue;
             }
             let broker_data = self

@@ -6,7 +6,6 @@ use rand::prelude::*;
 
 use crate::message::MessageQueue;
 use crate::nsresolver::NsResolver;
-use crate::permission::Permission;
 use crate::protocol::{
     request::{GetRouteInfoRequestHeader, RequestCode},
     response::ResponseCode,
@@ -179,15 +178,13 @@ impl<NR: NsResolver> NameServer<NR> {
             .into_iter()
             .flat_map(|queue_data| {
                 let mut mqs = Vec::new();
-                if let Some(perm) = Permission::from_bits(queue_data.perm) {
-                    if perm.is_readable() {
-                        for i in 0..queue_data.read_queue_nums {
-                            mqs.push(MessageQueue {
-                                topic: topic.to_string(),
-                                broker_name: queue_data.broker_name.clone(),
-                                queue_id: i as u32,
-                            })
-                        }
+                if queue_data.perm.is_readable() {
+                    for i in 0..queue_data.read_queue_nums {
+                        mqs.push(MessageQueue {
+                            topic: topic.to_string(),
+                            broker_name: queue_data.broker_name.clone(),
+                            queue_id: i as u32,
+                        })
                     }
                 }
                 mqs
