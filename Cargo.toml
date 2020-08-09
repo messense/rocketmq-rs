@@ -11,7 +11,7 @@ serde = { version = "1.0", features = ["derive"] }
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 hex = "0.4"
 rand = "0.7.3"
-tokio = { version = "0.2", features = ["tcp", "dns", "io-util", "macros"] }
+tokio = { version = "0.2", features = ["tcp", "dns", "io-util"] }
 num_enum = "0.5.0"
 reqwest = { version = "0.10.6", default-features = false, features = ["blocking"] }
 futures = "0.3.5"
@@ -19,3 +19,6 @@ tokio-util = "0.3.1"
 bytes = "0.5.5"
 bitflags = "1.2.1"
 dirty-json = "0.1.0"
+
+[dev-dependencies]
+tokio = { version = "0.2", features = ["macros"] }
