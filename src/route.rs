@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
 
 use rand::prelude::*;
 use serde::Deserialize;
@@ -144,26 +144,6 @@ impl TopicPublishInfo {
             .iter()
             .find(|&queue| queue.broker_name == broker_name)
             .map(|x| x.write_queue_nums)
-    }
-
-    pub fn select_message_queue(&mut self) -> &MessageQueue {
-        let new_index = self.queue_index.fetch_add(1, Ordering::Relaxed);
-        let index = new_index % self.message_queues.len();
-        &self.message_queues[index]
-    }
-
-    pub fn select_message_queue_exclude_name(&mut self, broker_name: &str) -> &MessageQueue {
-        if broker_name.is_empty() {
-            return self.select_message_queue();
-        }
-        let mqs: Vec<_> = self
-            .message_queues
-            .iter()
-            .filter(|&queue| queue.broker_name != broker_name)
-            .collect();
-        let new_index = self.queue_index.fetch_add(1, Ordering::Relaxed);
-        let index = new_index % mqs.len();
-        &mqs[index]
     }
 
     pub fn len(&self) -> usize {

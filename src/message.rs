@@ -33,6 +33,7 @@ impl Property {
     pub const TRANSACTION_CHECK_TIMES: &'static str = "TRANSACTION_CHECK_TIMES";
     pub const CHECK_IMMUNITY_TIME_IN_SECONDS: &'static str = "CHECK_IMMUNITY_TIME_IN_SECONDS";
     pub const KEY_SEPARATOR: &'static str = " ";
+    pub const SHARDING_KEY: &'static str = "SHARDING_KEY";
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +50,7 @@ pub struct Message {
     properties: HashMap<String, String>,
     body: Vec<u8>,
     transaction_id: String,
+    pub(crate) queue: Option<MessageQueue>,
 }
 
 impl Message {
@@ -78,14 +80,26 @@ impl Message {
             body,
             properties: props,
             transaction_id: String::new(),
+            queue: None,
         }
     }
 
-    fn get_unique_key(&self) -> Option<String> {
+    pub fn unique_key(&self) -> Option<String> {
         self.properties
             .get(Property::UNIQ_CLIENT_MSG_ID_KEY)
             .cloned()
             .and_then(|val| if val.is_empty() { None } else { Some(val) })
+    }
+
+    pub fn sharding_key(&self) -> Option<String> {
+        self.properties
+            .get(Property::SHARDING_KEY)
+            .cloned()
+            .and_then(|val| if val.is_empty() { None } else { Some(val) })
+    }
+
+    pub fn topic(&self) -> &str {
+        &self.topic
     }
 }
 
@@ -197,8 +211,9 @@ impl MessageExt {
                 properties,
                 body,
                 transaction_id: String::new(),
+                queue: None,
             };
-            let msg_id = msg.get_unique_key().unwrap_or_else(|| {
+            let msg_id = msg.unique_key().unwrap_or_else(|| {
                 Self::get_message_offset_id(store_host_buf, store_host_port, physic_offset)
             });
             let msg_ex = MessageExt {

@@ -6,6 +6,7 @@ const DEFAULT_NAMESRV_ADDR: &'static str = "http://jmenv.tbsite.net:8080/rocketm
 
 pub trait NsResolver {
     fn resolve(&self) -> Result<Vec<String>, Error>;
+    fn description(&self) -> &'static str;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -16,6 +17,10 @@ impl NsResolver for EnvResolver {
         Ok(env::var("NAMESRV_ADDR")
             .map(|s| s.split(';').map(str::to_string).collect())
             .unwrap_or_default())
+    }
+
+    fn description(&self) -> &'static str {
+        "envvar resolver"
     }
 }
 
@@ -33,6 +38,10 @@ impl StaticResolver {
 impl NsResolver for StaticResolver {
     fn resolve(&self) -> Result<Vec<String>, Error> {
         Ok(self.addrs.clone())
+    }
+
+    fn description(&self) -> &'static str {
+        "static resolver"
     }
 }
 
@@ -55,6 +64,10 @@ impl<T: NsResolver> NsResolver for PassthroughResolver<T> {
         } else {
             Ok(self.addrs.clone())
         }
+    }
+
+    fn description(&self) -> &'static str {
+        "passthrough resolver"
     }
 }
 
@@ -104,5 +117,9 @@ impl NsResolver for HttpResolver {
         } else {
             self.fallback.resolve()
         }
+    }
+
+    fn description(&self) -> &'static str {
+        "http resolver"
     }
 }

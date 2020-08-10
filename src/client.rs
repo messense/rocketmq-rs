@@ -205,7 +205,7 @@ impl<P: InnerProducer, C: InnerConsumer> Client<P, C> {
     }
 
     fn rebalance_imediately(&self) {
-        let mut consumers = self.consumers.lock().unwrap();
+        let consumers = self.consumers.lock().unwrap();
         for consumer in consumers.values() {
             consumer.rebalance();
         }
