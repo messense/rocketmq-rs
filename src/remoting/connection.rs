@@ -47,6 +47,15 @@ impl ConnectionSender {
             _ => Err(Error::Connection(ConnectionError::Disconnected)),
         }
     }
+
+    pub async fn send_oneway(&self, cmd: RemotingCommand) -> Result<(), Error> {
+        let mut cmd = cmd;
+        cmd.header.opaque = self.opaque_id.fetch_add(1, Ordering::SeqCst);
+        self.tx
+            .send(cmd)
+            .map_err(|_| Error::Connection(ConnectionError::Disconnected))?;
+        Ok(())
+    }
 }
 
 struct Receiver<S: Stream<Item = Result<RemotingCommand, Error>>> {

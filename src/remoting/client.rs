@@ -37,6 +37,12 @@ impl RemotingClient {
         Ok(sender.send(cmd).await?)
     }
 
+    pub async fn invoke_oneway(&self, addr: &str, cmd: RemotingCommand) -> Result<(), Error> {
+        let conn = self.get_connection(addr).await?;
+        let sender = conn.sender();
+        Ok(sender.send_oneway(cmd).await?)
+    }
+
     pub async fn get_connection(&self, addr: &str) -> Result<Arc<Connection>, Error> {
         let rx = {
             match self.connections.lock().unwrap().get_mut(addr) {

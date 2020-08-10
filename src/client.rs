@@ -128,6 +128,11 @@ impl<P: InnerProducer, C: InnerConsumer> Client<P, C> {
         Ok(self.remote_client.invoke(addr, cmd).await?)
     }
 
+    #[inline]
+    pub async fn invoke_oneway(&self, addr: &str, cmd: RemotingCommand) -> Result<(), Error> {
+        Ok(self.remote_client.invoke_oneway(addr, cmd).await?)
+    }
+
     pub async fn pull_message(
         &self,
         addr: &str,
