@@ -252,10 +252,12 @@ mod test {
     use super::*;
     use crate::resolver::StaticResolver;
 
+    const TOPIC: &'static str = "DefaultCluster";
+
     #[tokio::test]
     async fn test_query_topic_route_info_with_empty_namesrv() {
         let namesrv = NameServer::new(StaticResolver::new(vec![])).unwrap();
-        let res = namesrv.query_topic_route_info("test").await;
+        let res = namesrv.query_topic_route_info(TOPIC).await;
         assert!(res.is_err());
     }
 
@@ -263,7 +265,7 @@ mod test {
     async fn test_query_topic_route_info() {
         let namesrv =
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
-        let res = namesrv.query_topic_route_info("TopicTest").await;
+        let res = namesrv.query_topic_route_info(TOPIC).await;
         println!("{:?}", res);
         assert!(!res.is_err());
     }
@@ -272,18 +274,15 @@ mod test {
     async fn test_update_topic_route_info() {
         let namesrv =
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
-        assert!(namesrv.update_topic_route_info("TopicTest").await.unwrap());
-        assert!(!namesrv.update_topic_route_info("TopicTest").await.unwrap());
+        assert!(namesrv.update_topic_route_info(TOPIC).await.unwrap());
+        assert!(!namesrv.update_topic_route_info(TOPIC).await.unwrap());
     }
 
     #[tokio::test]
     async fn test_fetch_subscribe_message_queues() {
         let namesrv =
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
-        let res = namesrv
-            .fetch_subscribe_message_queues("TopicTest")
-            .await
-            .unwrap();
+        let res = namesrv.fetch_subscribe_message_queues(TOPIC).await.unwrap();
         assert!(!res.is_empty());
     }
 
@@ -291,10 +290,7 @@ mod test {
     async fn test_fetch_publish_message_queues() {
         let namesrv =
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
-        let res = namesrv
-            .fetch_publish_message_queues("TopicTest")
-            .await
-            .unwrap();
+        let res = namesrv.fetch_publish_message_queues(TOPIC).await.unwrap();
         assert!(!res.is_empty());
     }
 
@@ -302,8 +298,8 @@ mod test {
     pub async fn find_broker_addr_by_topic() {
         let namesrv =
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
-        namesrv.update_topic_route_info("TopicTest").await.unwrap();
-        let addr = namesrv.find_broker_addr_by_topic("TopicTest").unwrap();
+        namesrv.update_topic_route_info(TOPIC).await.unwrap();
+        let addr = namesrv.find_broker_addr_by_topic(TOPIC).unwrap();
         assert!(addr.ends_with(":10911"));
     }
 
@@ -311,8 +307,8 @@ mod test {
     pub async fn find_broker_addr_by_name() {
         let namesrv =
             NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
-        namesrv.update_topic_route_info("TopicTest").await.unwrap();
-        let res = namesrv.query_topic_route_info("TopicTest").await.unwrap();
+        namesrv.update_topic_route_info(TOPIC).await.unwrap();
+        let res = namesrv.query_topic_route_info(TOPIC).await.unwrap();
         let broker_name = res.broker_datas.first().map(|x| &x.broker_name).unwrap();
         let addr = namesrv.find_broker_addr_by_name(broker_name).unwrap();
         assert!(addr.ends_with(":10911"));
