@@ -1,4 +1,5 @@
 mod client;
+mod consumer;
 mod error;
 mod message;
 mod namesrv;
@@ -12,3 +13,4 @@ pub mod resolver;
 mod route;
 
 pub use error::Error;
+pub use producer::{Producer, ProducerOptions};

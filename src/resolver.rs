@@ -1,12 +1,26 @@
 use std::env;
 
+use dyn_clone::DynClone;
+
 use crate::Error;
 
 const DEFAULT_NAMESRV_ADDR: &'static str = "http://jmenv.tbsite.net:8080/rocketmq/nsaddr";
 
-pub trait NsResolver {
+pub trait NsResolver: DynClone {
     fn resolve(&self) -> Result<Vec<String>, Error>;
     fn description(&self) -> &'static str;
+}
+
+dyn_clone::clone_trait_object!(NsResolver);
+
+impl NsResolver for Box<dyn NsResolver> {
+    fn resolve(&self) -> Result<Vec<String>, Error> {
+        (*self).resolve()
+    }
+
+    fn description(&self) -> &'static str {
+        (*self).description()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -57,7 +71,7 @@ impl<T: NsResolver> PassthroughResolver<T> {
     }
 }
 
-impl<T: NsResolver> NsResolver for PassthroughResolver<T> {
+impl<T: NsResolver + Clone> NsResolver for PassthroughResolver<T> {
     fn resolve(&self) -> Result<Vec<String>, Error> {
         if self.addrs.is_empty() {
             self.fallback.resolve()

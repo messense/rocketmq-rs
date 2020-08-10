@@ -1,17 +1,14 @@
 use std::fmt;
 use std::time::Duration;
 
+use crate::client::{Client, ClientOptions, InnerProducer};
 use crate::message::MessageExt;
+use crate::namesrv::NameServer;
 use crate::resolver::{HttpResolver, NsResolver, PassthroughResolver};
+use crate::Error;
 use selector::{QueueSelector, RoundRobinQueueSelector};
 
 pub mod selector;
-
-pub trait Producer {
-    fn start(&self);
-
-    fn shutdown(&self);
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(i32)]
@@ -104,5 +101,51 @@ impl ProducerOptions {
             url.to_string(),
         ));
         self
+    }
+}
+
+/// RocketMQ producer
+pub struct Producer {
+    group: String,
+    options: ProducerOptions,
+    client: Client<Self, crate::consumer::Consumer, Box<dyn NsResolver>>,
+}
+
+impl Producer {
+    pub fn new(group: &str) -> Result<Self, Error> {
+        Self::with_options(group, ProducerOptions::new())
+    }
+
+    pub fn with_options(group: &str, options: ProducerOptions) -> Result<Self, Error> {
+        let client_options = ClientOptions::new(group);
+        let name_server = NameServer::new(dyn_clone::clone_box(&*options.resolver))?;
+        Ok(Self {
+            group: group.to_string(),
+            options,
+            client: Client::new(client_options, name_server),
+        })
+    }
+}
+
+impl fmt::Debug for Producer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Producer")
+            .field("group", &self.group)
+            .field("options", &self.options)
+            .finish()
+    }
+}
+
+impl InnerProducer for Producer {
+    fn publish_topic_list(&self) -> Vec<String> {
+        unimplemented!()
+    }
+
+    fn update_topic_publish_info(&self) {
+        unimplemented!()
+    }
+
+    fn is_publish_topic_need_update(&self, topic: &str) -> bool {
+        unimplemented!()
     }
 }

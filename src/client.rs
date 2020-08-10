@@ -5,11 +5,13 @@ use std::sync::{Arc, Mutex};
 use if_addrs::get_if_addrs;
 
 use crate::message::MessageQueue;
+use crate::namesrv::NameServer;
 use crate::producer::{PullResult, PullStatus};
 use crate::protocol::{
     request::PullMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::remoting::RemotingClient;
+use crate::resolver::NsResolver;
 use crate::Error;
 
 pub trait InnerProducer {
@@ -59,6 +61,23 @@ pub struct ClientOptions {
     // resolver
 }
 
+impl ClientOptions {
+    pub fn new(group: &str) -> Self {
+        Self {
+            group_name: group.to_string(),
+            name_server_addrs: Vec::new(),
+            client_ip: client_ip_v4(),
+            instance_name: "DEFAULT".to_string(),
+            unit_mode: false,
+            unit_name: String::new(),
+            vip_channel_enabled: false,
+            retry_times: 3,
+            credentials: None,
+            namespace: String::new(),
+        }
+    }
+}
+
 impl Default for ClientOptions {
     fn default() -> Self {
         Self {
@@ -92,20 +111,22 @@ fn client_ip_v4() -> String {
 }
 
 #[derive(Debug)]
-pub struct Client<P: InnerProducer, C: InnerConsumer> {
+pub struct Client<P: InnerProducer, C: InnerConsumer, R: NsResolver> {
     options: ClientOptions,
     remote_client: RemotingClient,
     consumers: Arc<Mutex<HashMap<String, C>>>,
     producers: Arc<Mutex<HashMap<String, P>>>,
+    name_server: NameServer<R>,
 }
 
-impl<P: InnerProducer, C: InnerConsumer> Client<P, C> {
-    pub fn new(options: ClientOptions) -> Self {
+impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
+    pub fn new(options: ClientOptions, name_server: NameServer<R>) -> Self {
         Self {
             options,
             remote_client: RemotingClient::new(),
             consumers: Arc::new(Mutex::new(HashMap::new())),
             producers: Arc::new(Mutex::new(HashMap::new())),
+            name_server,
         }
     }
 
@@ -153,7 +174,7 @@ impl<P: InnerProducer, C: InnerConsumer> Client<P, C> {
                         res.code(),
                         res.header.remark
                     ),
-                })
+                });
             }
         };
         let ext_fields = &res.header.ext_fields;
