@@ -4,11 +4,11 @@ use std::sync::Mutex;
 use rand::prelude::*;
 
 use crate::message::MessageQueue;
-use crate::nsresolver::NsResolver;
 use crate::protocol::{
     request::GetRouteInfoRequestHeader, RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::remoting::RemotingClient;
+use crate::resolver::NsResolver;
 use crate::route::{BrokerData, TopicRouteData, MASTER_ID};
 use crate::Error;
 
@@ -250,7 +250,7 @@ impl<NR: NsResolver> NameServer<NR> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::nsresolver::StaticResolver;
+    use crate::resolver::StaticResolver;
 
     #[tokio::test]
     async fn test_query_topic_route_info_with_empty_namesrv() {

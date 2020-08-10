@@ -2,10 +2,10 @@ use std::fmt;
 use std::time::Duration;
 
 use crate::message::MessageExt;
-use crate::nsresolver::{HttpResolver, NsResolver};
+use crate::resolver::{HttpResolver, NsResolver, PassthroughResolver};
 use selector::{QueueSelector, RoundRobinQueueSelector};
 
-mod selector;
+pub mod selector;
 
 pub trait Producer {
     fn start(&self);
@@ -87,6 +87,22 @@ impl ProducerOptions {
 
     pub fn set_resolver<R: NsResolver + 'static>(&mut self, resolver: R) -> &mut Self {
         self.resolver = Box::new(resolver);
+        self
+    }
+
+    pub fn set_name_server(&mut self, addrs: Vec<String>) -> &mut Self {
+        self.resolver = Box::new(PassthroughResolver::new(
+            addrs,
+            HttpResolver::new("DEFAULT".to_string()),
+        ));
+        self
+    }
+
+    pub fn set_name_server_domain(&mut self, url: &str) -> &mut Self {
+        self.resolver = Box::new(HttpResolver::with_domain(
+            "DEFAULT".to_string(),
+            url.to_string(),
+        ));
         self
     }
 }
