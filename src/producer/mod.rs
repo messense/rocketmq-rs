@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::client::{Client, ClientOptions, InnerProducer};
@@ -104,19 +105,18 @@ impl ProducerOptions {
     }
 }
 
-/// RocketMQ producer
-pub struct Producer {
+struct ProducerInner {
     group: String,
     options: ProducerOptions,
     client: Client<Self, crate::consumer::Consumer, Box<dyn NsResolver>>,
 }
 
-impl Producer {
-    pub fn new(group: &str) -> Result<Self, Error> {
+impl ProducerInner {
+    fn new(group: &str) -> Result<Self, Error> {
         Self::with_options(group, ProducerOptions::new())
     }
 
-    pub fn with_options(group: &str, options: ProducerOptions) -> Result<Self, Error> {
+    fn with_options(group: &str, options: ProducerOptions) -> Result<Self, Error> {
         let client_options = ClientOptions::new(group);
         let name_server = NameServer::new(dyn_clone::clone_box(&*options.resolver), None)?;
         Ok(Self {
@@ -127,16 +127,7 @@ impl Producer {
     }
 }
 
-impl fmt::Debug for Producer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Producer")
-            .field("group", &self.group)
-            .field("options", &self.options)
-            .finish()
-    }
-}
-
-impl InnerProducer for Producer {
+impl InnerProducer for ProducerInner {
     fn publish_topic_list(&self) -> Vec<String> {
         unimplemented!()
     }
@@ -147,5 +138,51 @@ impl InnerProducer for Producer {
 
     fn is_publish_topic_need_update(&self, topic: &str) -> bool {
         unimplemented!()
+    }
+}
+
+/// RocketMQ producer
+pub struct Producer {
+    inner: Arc<ProducerInner>,
+}
+
+impl fmt::Debug for Producer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Producer")
+            .field("group", &self.inner.group)
+            .field("options", &self.inner.options)
+            .finish()
+    }
+}
+
+impl Producer {
+    pub fn start(&self) {
+        self.inner
+            .client
+            .register_producer(&self.inner.group, Arc::clone(&self.inner));
+        self.inner.client.start();
+    }
+
+    pub fn shutdown(&self) {
+        self.inner.client.unregister_producer(&self.inner.group);
+        self.inner.client.shutdown();
+    }
+}
+
+impl InnerProducer for Producer {
+    fn publish_topic_list(&self) -> Vec<String> {
+        self.inner.publish_topic_list()
+    }
+
+    fn update_topic_publish_info(&self) {
+        self.inner.update_topic_publish_info()
+    }
+
+    fn is_publish_topic_need_update(&self, topic: &str) -> bool {
+        self.inner.is_publish_topic_need_update(topic)
+    }
+
+    fn is_unit_mode(&self) -> bool {
+        self.inner.is_unit_mode()
     }
 }

@@ -64,7 +64,7 @@ impl<NR: NsResolver> NameServer<NR> {
         self.inner.lock().unwrap().servers.is_empty()
     }
 
-    pub fn update_name_server_address(&mut self) -> Result<(), Error> {
+    pub fn update_name_server_address(&self) -> Result<(), Error> {
         let mut inner = self.inner.lock().unwrap();
         if let Ok(servers) = self.resolver.resolve() {
             inner.servers = servers;
@@ -88,24 +88,20 @@ impl<NR: NsResolver> NameServer<NR> {
             );
             let res = self.remoting_client.invoke(addr, cmd).await;
             if let Ok(res) = res {
-                match ResponseCode::from_code(res.header.code)? {
+                return match ResponseCode::from_code(res.header.code)? {
                     ResponseCode::Success => {
                         if res.body.is_empty() {
                             // FIXME: error
                         }
                         let route_data = TopicRouteData::from_bytes(&res.body)?;
-                        return Ok(route_data);
+                        Ok(route_data)
                     }
-                    ResponseCode::TopicNotExist => {
-                        return Err(Error::TopicNotExist(topic.to_string()))
-                    }
-                    _ => {
-                        return Err(Error::ResponseError {
-                            code: res.header.code,
-                            message: res.header.remark.clone(),
-                        })
-                    }
-                }
+                    ResponseCode::TopicNotExist => Err(Error::TopicNotExist(topic.to_string())),
+                    _ => Err(Error::ResponseError {
+                        code: res.header.code,
+                        message: res.header.remark.clone(),
+                    }),
+                };
             } else {
                 println!("{:?}", res);
             }

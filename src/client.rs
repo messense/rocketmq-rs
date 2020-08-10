@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::process;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Once};
 
 use if_addrs::get_if_addrs;
+use tokio::sync::oneshot;
+use tokio::time;
 
 use crate::message::MessageQueue;
 use crate::namesrv::NameServer;
@@ -20,6 +22,24 @@ pub trait InnerProducer {
     fn is_publish_topic_need_update(&self, topic: &str) -> bool;
     fn is_unit_mode(&self) -> bool {
         false
+    }
+}
+
+impl<T: InnerProducer> InnerProducer for Arc<T> {
+    fn publish_topic_list(&self) -> Vec<String> {
+        (*self).publish_topic_list()
+    }
+
+    fn update_topic_publish_info(&self) {
+        (*self).update_topic_publish_info()
+    }
+
+    fn is_publish_topic_need_update(&self, topic: &str) -> bool {
+        (*self).is_publish_topic_need_update(topic)
+    }
+
+    fn is_unit_mode(&self) -> bool {
+        (*self).is_unit_mode()
     }
 }
 
@@ -76,7 +96,7 @@ impl ClientOptions {
         Self {
             group_name: group.to_string(),
             name_server_addrs: Vec::new(),
-            client_ip: client_ip_v4(),
+            client_ip: client_ipv4(),
             instance_name: "DEFAULT".to_string(),
             unit_mode: false,
             unit_name: String::new(),
@@ -93,7 +113,7 @@ impl Default for ClientOptions {
         Self {
             group_name: String::new(),
             name_server_addrs: Vec::new(),
-            client_ip: client_ip_v4(),
+            client_ip: client_ipv4(),
             instance_name: "DEFAULT".to_string(),
             unit_mode: false,
             unit_name: String::new(),
@@ -105,7 +125,7 @@ impl Default for ClientOptions {
     }
 }
 
-fn client_ip_v4() -> String {
+fn client_ipv4() -> String {
     if let Ok(addrs) = get_if_addrs() {
         for addr in addrs {
             if addr.is_loopback() {
@@ -124,20 +144,27 @@ fn client_ip_v4() -> String {
 pub struct Client<P: InnerProducer, C: InnerConsumer, R: NsResolver> {
     options: ClientOptions,
     remote_client: RemotingClient,
-    consumers: Arc<Mutex<HashMap<String, C>>>,
-    producers: Arc<Mutex<HashMap<String, P>>>,
+    consumers: Arc<Mutex<HashMap<String, Arc<C>>>>,
+    producers: Arc<Mutex<HashMap<String, Arc<P>>>>,
     name_server: NameServer<R>,
+    once: Once,
+    shutdown_tx: oneshot::Sender<()>,
+    shutdown_rx: oneshot::Receiver<()>,
 }
 
 impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
     pub fn new(options: ClientOptions, name_server: NameServer<R>) -> Self {
         let credentials = options.credentials.clone();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
         Self {
             options,
             remote_client: RemotingClient::new(credentials),
             consumers: Arc::new(Mutex::new(HashMap::new())),
             producers: Arc::new(Mutex::new(HashMap::new())),
             name_server,
+            once: Once::new(),
+            shutdown_tx,
+            shutdown_rx,
         }
     }
 
@@ -154,6 +181,30 @@ impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
         }
         client_id
     }
+
+    pub fn start(&self) {
+        self.once.call_once(|| {
+            // Update name server address
+            tokio::spawn(Box::pin(async {
+                time::delay_for(time::Duration::from_secs(10)).await;
+                let mut interval = time::interval(time::Duration::from_secs(2 * 60));
+                loop {
+                    interval.tick().await;
+                    // let _res = self.name_server.update_name_server_address();
+                }
+            }));
+
+            // Update route info
+
+            // Send heartbeat to brokers
+
+            // Persist offset
+
+            // Rebalance
+        })
+    }
+
+    pub fn shutdown(&self) {}
 
     #[inline]
     pub async fn invoke(&self, addr: &str, cmd: RemotingCommand) -> Result<RemotingCommand, Error> {
@@ -216,7 +267,7 @@ impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
         })
     }
 
-    pub fn register_consumer(&self, group: &str, consumer: C) {
+    pub fn register_consumer(&self, group: &str, consumer: Arc<C>) {
         let mut consumers = self.consumers.lock().unwrap();
         consumers.entry(group.to_string()).or_insert(consumer);
     }
@@ -226,7 +277,7 @@ impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
         consumers.remove(group);
     }
 
-    pub fn register_producer(&self, group: &str, producer: P) {
+    pub fn register_producer(&self, group: &str, producer: Arc<P>) {
         let mut producers = self.producers.lock().unwrap();
         producers.entry(group.to_string()).or_insert(producer);
     }
@@ -246,11 +297,11 @@ impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
 
 #[cfg(test)]
 mod test {
-    use super::client_ip_v4;
+    use super::client_ipv4;
 
     #[test]
     fn test_client_ip_v4() {
-        let ip = client_ip_v4();
+        let ip = client_ipv4();
         assert_ne!(ip, "127.0.0.1");
     }
 }
