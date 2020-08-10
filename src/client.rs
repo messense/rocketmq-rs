@@ -1,5 +1,7 @@
 use std::process;
 
+use if_addrs::get_if_addrs;
+
 use crate::producer::{PullResult, PullStatus};
 use crate::protocol::{
     request::PullMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
@@ -35,7 +37,7 @@ impl Default for ClientOptions {
         Self {
             group_name: String::new(),
             name_server_addrs: Vec::new(),
-            client_ip: String::new(), // FIXME
+            client_ip: client_ip_v4(),
             instance_name: "DEFAULT".to_string(),
             unit_mode: false,
             unit_name: String::new(),
@@ -45,6 +47,21 @@ impl Default for ClientOptions {
             namespace: String::new(),
         }
     }
+}
+
+fn client_ip_v4() -> String {
+    if let Ok(addrs) = get_if_addrs() {
+        for addr in addrs {
+            if addr.is_loopback() {
+                continue;
+            }
+            let ip = addr.ip();
+            if ip.is_ipv4() {
+                return ip.to_string();
+            }
+        }
+    }
+    "127.0.0.1".to_string()
 }
 
 #[derive(Debug)]
@@ -129,5 +146,16 @@ impl Client {
             message_exts: Vec::new(),
             body: res.body,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::client_ip_v4;
+
+    #[test]
+    fn test_client_ip_v4() {
+        let ip = client_ip_v4();
+        assert_ne!(ip, "127.0.0.1");
     }
 }
