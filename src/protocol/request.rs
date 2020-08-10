@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -112,6 +113,42 @@ impl EncodeRequestHeader for GetRouteInfoRequestHeader {
     fn encode(self) -> HashMap<String, String> {
         let mut map = HashMap::new();
         map.insert("topic".to_string(), self.topic);
+        map
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PullMessageRequestHeader {
+    pub consumer_group: String,
+    pub topic: String,
+    pub queue_id: i32,
+    pub queue_offset: i64,
+    pub max_msg_nums: i32,
+    pub sys_flag: i32,
+    pub commit_offset: i64,
+    pub suspend_timeout_millis: Duration,
+    pub sub_expression: String,
+    pub sub_version: i64,
+    pub expression_type: String,
+}
+
+impl EncodeRequestHeader for PullMessageRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("consumerGroup".to_string(), self.consumer_group);
+        map.insert("topic".to_string(), self.topic);
+        map.insert("queueId".to_string(), self.queue_id.to_string());
+        map.insert("queueOffset".to_string(), self.queue_offset.to_string());
+        map.insert("maxMsgNums".to_string(), self.max_msg_nums.to_string());
+        map.insert("sysFlag".to_string(), self.sys_flag.to_string());
+        map.insert("commitOffset".to_string(), self.commit_offset.to_string());
+        map.insert(
+            "suspendTimeoutMillis".to_string(),
+            self.suspend_timeout_millis.as_millis().to_string(),
+        );
+        map.insert("subscription".to_string(), self.sub_expression);
+        map.insert("subVersion".to_string(), self.sub_version.to_string());
+        map.insert("expressionType".to_string(), self.expression_type);
         map
     }
 }

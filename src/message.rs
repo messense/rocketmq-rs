@@ -42,7 +42,7 @@ pub struct MessageQueue {
     pub queue_id: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Message {
     topic: String,
     flag: i32,
@@ -89,7 +89,7 @@ impl Message {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MessageExt {
     message: Message,
     queue_id: i32,

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::sync::Mutex;
 
 use rand::prelude::*;
@@ -7,9 +6,7 @@ use rand::prelude::*;
 use crate::message::MessageQueue;
 use crate::nsresolver::NsResolver;
 use crate::protocol::{
-    request::{GetRouteInfoRequestHeader, RequestCode},
-    response::ResponseCode,
-    RemotingCommand,
+    request::GetRouteInfoRequestHeader, RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::remoting::RemotingClient;
 use crate::route::{BrokerData, TopicRouteData, MASTER_ID};
@@ -84,13 +81,13 @@ impl<NR: NsResolver> NameServer<NR> {
         };
         for addr in &inner.servers {
             let cmd = RemotingCommand::with_header(
-                RequestCode::GetRouteInfoByTopic.into(),
+                RequestCode::GetRouteInfoByTopic,
                 header.clone(),
                 Vec::new(),
             );
             let res = self.remoting_client.invoke(addr, cmd).await;
             if let Ok(res) = res {
-                match ResponseCode::try_from(res.header.code).unwrap() {
+                match ResponseCode::from_code(res.header.code)? {
                     ResponseCode::Success => {
                         if res.body.is_empty() {
                             // FIXME: error

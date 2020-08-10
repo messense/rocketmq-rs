@@ -14,6 +14,8 @@ use crate::Error;
 use header::{Header, HeaderCodec, LanguageCode, HEADER_FIXED_LENGTH};
 pub use header::{HeaderCodecType, JsonHeaderCodec, RocketMQHeaderCodec};
 use request::EncodeRequestHeader;
+pub use request::RequestCode;
+pub use response::ResponseCode;
 
 const _LENGTH: usize = 4;
 const RESPONSE_TYPE: i32 = 1;
@@ -47,9 +49,13 @@ impl RemotingCommand {
         }
     }
 
-    pub fn with_header<H: EncodeRequestHeader>(code: i16, header: H, body: Vec<u8>) -> Self {
+    pub fn with_header<H: EncodeRequestHeader>(
+        code: RequestCode,
+        header: H,
+        body: Vec<u8>,
+    ) -> Self {
         let ext_fields = header.encode();
-        Self::new(0, code, 0, String::new(), ext_fields, body)
+        Self::new(0, code.into(), 0, String::new(), ext_fields, body)
     }
 
     fn encode_codec_type(source: i32, codec: impl HeaderCodec) -> [u8; 4] {
@@ -210,7 +216,7 @@ mod test {
         );
         let mut codec = MqCodec;
         let mut encoded = BytesMut::new();
-        codec.encode(cmd.clone(), &mut encoded);
+        codec.encode(cmd.clone(), &mut encoded).unwrap();
         let decoded = codec.decode(&mut encoded).unwrap().unwrap();
         assert_eq!(cmd, decoded);
     }

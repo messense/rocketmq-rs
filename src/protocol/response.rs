@@ -1,4 +1,8 @@
+use std::convert::TryFrom;
+
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+
+use crate::Error;
 
 #[repr(i16)]
 #[derive(Debug, Copy, Clone, IntoPrimitive, TryFromPrimitive)]
@@ -12,6 +16,15 @@ pub enum ResponseCode {
     PullNotFound = 19,
     PullRetryImmediately = 20,
     PullOffsetMoved = 21,
+}
+
+impl ResponseCode {
+    pub fn from_code(code: i16) -> Result<Self, Error> {
+        ResponseCode::try_from(code).map_err(|_| Error::ResponseError {
+            code,
+            message: format!("invalid response code {}", code),
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
