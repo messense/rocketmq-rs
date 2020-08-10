@@ -1,13 +1,40 @@
+use std::collections::HashMap;
 use std::process;
+use std::sync::{Arc, Mutex};
 
 use if_addrs::get_if_addrs;
 
+use crate::message::MessageQueue;
 use crate::producer::{PullResult, PullStatus};
 use crate::protocol::{
     request::PullMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::remoting::RemotingClient;
 use crate::Error;
+
+pub trait InnerProducer {
+    fn publish_topic_list(&self) -> Vec<String>;
+    fn update_topic_publish_info(&self);
+    fn is_publish_topic_need_update(&self, topic: &str) -> bool;
+    fn is_unit_mode(&self) -> bool {
+        false
+    }
+}
+
+pub trait InnerConsumer {
+    fn persist_consumer_offset(&self) -> Result<(), Error>;
+    fn update_topic_subscribe_info(&self, topic: &str, mqs: &[MessageQueue]);
+    fn is_subscribe_topic_need_update(&self, topic: &str) -> bool;
+    // fn subscription_data_list(&self);
+    fn rebalance(&self);
+    fn is_unit_mode(&self) -> bool {
+        false
+    }
+    // fn get_consumer_running_info(&self);
+    fn get_c_type(&self) -> String;
+    fn get_model(&self) -> String;
+    fn get_where(&self) -> String;
+}
 
 #[derive(Debug, Clone)]
 pub struct Credentials {
@@ -65,16 +92,20 @@ fn client_ip_v4() -> String {
 }
 
 #[derive(Debug)]
-pub struct Client {
+pub struct Client<P: InnerProducer, C: InnerConsumer> {
     options: ClientOptions,
     remote_client: RemotingClient,
+    consumers: Arc<Mutex<HashMap<String, C>>>,
+    producers: Arc<Mutex<HashMap<String, P>>>,
 }
 
-impl Client {
+impl<P: InnerProducer, C: InnerConsumer> Client<P, C> {
     pub fn new(options: ClientOptions) -> Self {
         Self {
             options,
             remote_client: RemotingClient::new(),
+            consumers: Arc::new(Mutex::new(HashMap::new())),
+            producers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -146,6 +177,33 @@ impl Client {
             message_exts: Vec::new(),
             body: res.body,
         })
+    }
+
+    pub fn register_consumer(&self, group: &str, consumer: C) {
+        let mut consumers = self.consumers.lock().unwrap();
+        consumers.entry(group.to_string()).or_insert(consumer);
+    }
+
+    pub fn unregister_consumer(&self, group: &str) {
+        let mut consumers = self.consumers.lock().unwrap();
+        consumers.remove(group);
+    }
+
+    pub fn register_producer(&self, group: &str, producer: P) {
+        let mut producers = self.producers.lock().unwrap();
+        producers.entry(group.to_string()).or_insert(producer);
+    }
+
+    pub fn unregister_producer(&self, group: &str) {
+        let mut producers = self.producers.lock().unwrap();
+        producers.remove(group);
+    }
+
+    fn rebalance_imediately(&self) {
+        let mut consumers = self.consumers.lock().unwrap();
+        for consumer in consumers.values() {
+            consumer.rebalance();
+        }
     }
 }
 
