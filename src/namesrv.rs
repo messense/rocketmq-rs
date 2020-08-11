@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use rand::prelude::*;
 
@@ -23,14 +23,14 @@ struct NameServerInner {
     route_data_map: HashMap<String, TopicRouteData>,
 }
 
-#[derive(Debug)]
-pub struct NameServer<NR: NsResolver> {
-    inner: Mutex<NameServerInner>,
+#[derive(Debug, Clone)]
+pub struct NameServer<NR: NsResolver + Clone> {
+    inner: Arc<Mutex<NameServerInner>>,
     resolver: NR,
     remoting_client: RemotingClient,
 }
 
-impl<NR: NsResolver> NameServer<NR> {
+impl<NR: NsResolver + Clone> NameServer<NR> {
     pub fn new<C: Into<Option<Credentials>>>(resolver: NR, credentials: C) -> Result<Self, Error> {
         let servers = resolver.resolve()?;
         let inner = NameServerInner {
@@ -41,7 +41,7 @@ impl<NR: NsResolver> NameServer<NR> {
         };
         // TODO: check addrs
         Ok(Self {
-            inner: Mutex::new(inner),
+            inner: Arc::new(Mutex::new(inner)),
             resolver,
             remoting_client: RemotingClient::new(credentials),
         })

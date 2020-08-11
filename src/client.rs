@@ -100,7 +100,7 @@ fn client_ipv4() -> String {
 }
 
 #[derive(Debug)]
-pub struct Client<R: NsResolver> {
+pub struct Client<R: NsResolver + Clone> {
     options: ClientOptions,
     remote_client: RemotingClient,
     consumers: Arc<Mutex<HashMap<String, Arc<ConsumerInner>>>>,
@@ -111,7 +111,10 @@ pub struct Client<R: NsResolver> {
     shutdown_rx: oneshot::Receiver<()>,
 }
 
-impl<R: NsResolver> Client<R> {
+impl<R> Client<R>
+where
+    R: NsResolver + Clone + Send + Sync + 'static,
+{
     pub fn new(options: ClientOptions, name_server: NameServer<R>) -> Self {
         let credentials = options.credentials.clone();
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -144,14 +147,15 @@ impl<R: NsResolver> Client<R> {
     pub fn start(&self) {
         self.once.call_once(|| {
             // Update name server address
-            tokio::spawn(Box::pin(async {
+            let name_server = self.name_server.clone();
+            tokio::spawn(async move {
                 time::delay_for(time::Duration::from_secs(10)).await;
                 let mut interval = time::interval(time::Duration::from_secs(2 * 60));
                 loop {
                     interval.tick().await;
-                    // let _res = self.name_server.update_name_server_address();
+                    let _res = name_server.update_name_server_address();
                 }
-            }));
+            });
 
             // Update route info
 

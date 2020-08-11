@@ -34,10 +34,13 @@ pub struct PullResult {
 
 pub struct ProducerOptions {
     selector: QueueSelector,
+    resolver: Resolver,
     send_msg_timeout: Duration,
     default_topic_queue_nums: usize,
     create_topic_key: String,
-    resolver: Resolver,
+    compress_msg_body_over_how_much: usize,
+    max_message_size: usize,
+    max_retries: usize,
 }
 
 impl fmt::Debug for ProducerOptions {
@@ -47,6 +50,12 @@ impl fmt::Debug for ProducerOptions {
             .field("default_queue_nums", &self.default_topic_queue_nums)
             .field("create_topic_key", &self.create_topic_key)
             .field("resolver", &self.resolver.description())
+            .field(
+                "compress_msg_body_over_how_much",
+                &self.compress_msg_body_over_how_much,
+            )
+            .field("max_message_size", &self.max_message_size)
+            .field("max_retries", &self.max_retries)
             .finish()
     }
 }
@@ -55,10 +64,13 @@ impl Default for ProducerOptions {
     fn default() -> ProducerOptions {
         Self {
             selector: QueueSelector::default(),
+            resolver: Resolver::Http(HttpResolver::new("DEFAULT".to_string())),
             send_msg_timeout: Duration::from_secs(3),
             default_topic_queue_nums: 4,
             create_topic_key: "TBW102".to_string(),
-            resolver: Resolver::Http(HttpResolver::new("DEFAULT".to_string())),
+            compress_msg_body_over_how_much: 4 * 1024, // 4K
+            max_message_size: 4 * 1024 * 1024,         // 4M
+            max_retries: 2,
         }
     }
 }
