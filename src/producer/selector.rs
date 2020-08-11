@@ -4,14 +4,39 @@ use std::sync::{Arc, Mutex};
 
 use crate::message::{Message, MessageQueue};
 
-pub trait QueueSelector {
+pub trait QueueSelect {
     fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue;
+}
+
+#[derive(Debug, Clone)]
+pub enum QueueSelector {
+    Manual(ManualQueueSelector),
+    Random(RandomQueueSelector),
+    RoundRobin(RoundRobinQueueSelector),
+    Hash(HashQueueSelector),
+}
+
+impl QueueSelect for QueueSelector {
+    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
+        match self {
+            QueueSelector::Manual(inner) => inner.select(msg, mqs),
+            QueueSelector::Random(inner) => inner.select(msg, mqs),
+            QueueSelector::RoundRobin(inner) => inner.select(msg, mqs),
+            QueueSelector::Hash(inner) => inner.select(msg, mqs),
+        }
+    }
+}
+
+impl Default for QueueSelector {
+    fn default() -> Self {
+        Self::RoundRobin(RoundRobinQueueSelector::new())
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ManualQueueSelector;
 
-impl QueueSelector for ManualQueueSelector {
+impl QueueSelect for ManualQueueSelector {
     fn select(&self, msg: &Message, _mqs: &[MessageQueue]) -> MessageQueue {
         let mq = msg.queue.as_ref().unwrap();
         mq.clone()
@@ -21,7 +46,7 @@ impl QueueSelector for ManualQueueSelector {
 #[derive(Debug, Clone)]
 pub struct RandomQueueSelector;
 
-impl QueueSelector for RandomQueueSelector {
+impl QueueSelect for RandomQueueSelector {
     fn select(&self, _msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
         use rand::prelude::*;
 
@@ -44,7 +69,7 @@ impl RoundRobinQueueSelector {
     }
 }
 
-impl QueueSelector for RoundRobinQueueSelector {
+impl QueueSelect for RoundRobinQueueSelector {
     fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
         let topic = msg.topic();
         let mut indexer = self.indexer.lock().unwrap();
@@ -70,7 +95,7 @@ impl HashQueueSelector {
     }
 }
 
-impl QueueSelector for HashQueueSelector {
+impl QueueSelect for HashQueueSelector {
     fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
         if let Some(key) = msg.sharding_key() {
             let mut hasher = fnv::FnvHasher::default();

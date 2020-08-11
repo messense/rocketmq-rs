@@ -7,7 +7,7 @@ use crate::message::MessageExt;
 use crate::namesrv::NameServer;
 use crate::resolver::{HttpResolver, NsResolver, PassthroughResolver, Resolver};
 use crate::Error;
-use selector::{QueueSelector, RoundRobinQueueSelector};
+use selector::QueueSelector;
 
 pub mod selector;
 
@@ -33,7 +33,7 @@ pub struct PullResult {
 }
 
 pub struct ProducerOptions {
-    selector: Box<dyn QueueSelector>,
+    selector: QueueSelector,
     send_msg_timeout: Duration,
     default_topic_queue_nums: usize,
     create_topic_key: String,
@@ -54,7 +54,7 @@ impl fmt::Debug for ProducerOptions {
 impl Default for ProducerOptions {
     fn default() -> ProducerOptions {
         Self {
-            selector: Box::new(RoundRobinQueueSelector::new()),
+            selector: QueueSelector::default(),
             send_msg_timeout: Duration::from_secs(3),
             default_topic_queue_nums: 4,
             create_topic_key: "TBW102".to_string(),
