@@ -129,6 +129,7 @@ impl TopicRouteData {
     }
 }
 
+#[derive(Debug)]
 pub struct TopicPublishInfo {
     pub order_topic: bool,
     pub have_topic_router_info: bool,

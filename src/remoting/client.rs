@@ -3,7 +3,6 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use hmac::{Hmac, Mac, NewMac};
-use sha1::{Digest, Sha1};
 use tokio::sync::oneshot;
 
 use super::connection::Connection;
@@ -11,7 +10,7 @@ use crate::client::Credentials;
 use crate::error::{ConnectionError, Error};
 use crate::protocol::RemotingCommand;
 
-type HmacSha1 = Hmac<Sha1>;
+type HmacSha1 = Hmac<sha1::Sha1>;
 
 enum ConnectionStatus {
     Connected(Arc<Connection>),

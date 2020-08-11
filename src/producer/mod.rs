@@ -1,11 +1,13 @@
+use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::client::{Client, ClientOptions};
-use crate::message::MessageExt;
+use crate::message::{Message, MessageExt, MessageQueue};
 use crate::namesrv::NameServer;
-use crate::resolver::{HttpResolver, NsResolver, PassthroughResolver, Resolver};
+use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
+use crate::route::TopicPublishInfo;
 use crate::Error;
 use selector::QueueSelector;
 
@@ -73,6 +75,10 @@ impl ProducerOptions {
         }
     }
 
+    pub fn group_name(&self) -> &str {
+        &self.client_options.group_name
+    }
+
     pub fn set_send_msg_timeout(&mut self, timeout: Duration) -> &mut Self {
         self.send_msg_timeout = timeout;
         self
@@ -112,52 +118,74 @@ impl ProducerOptions {
 
 #[derive(Debug)]
 pub(crate) struct ProducerInner {
-    group: String,
-    options: ProducerOptions,
-    client: Client<Resolver>,
+    publish_info: HashMap<String, TopicPublishInfo>,
 }
 
 impl ProducerInner {
-    fn new(group: &str) -> Result<Self, Error> {
-        Self::with_options(group, ProducerOptions::new())
+    fn new() -> Self {
+        Self {
+            publish_info: HashMap::new(),
+        }
     }
 
-    fn with_options(group: &str, options: ProducerOptions) -> Result<Self, Error> {
-        let client_options = options.client_options.clone();
-        let name_server =
-            NameServer::new(options.resolver.clone(), client_options.credentials.clone())?;
-        Ok(Self {
-            group: group.to_string(),
-            options,
-            client: Client::new(client_options, name_server),
-        })
+    fn select_message_queue(&self, msg: &Message) -> MessageQueue {
+        todo!()
+    }
+
+    pub(crate) fn publish_topic_list(&self) -> Vec<String> {
+        self.publish_info.keys().cloned().collect()
+    }
+
+    pub(crate) fn update_topic_publish_info(&mut self, topic: &str, info: TopicPublishInfo) {
+        if !topic.is_empty() {
+            self.publish_info.insert(topic.to_string(), info);
+        }
+    }
+
+    pub(crate) fn is_publish_topic_need_update(&self, topic: &str) -> bool {
+        self.publish_info
+            .get(topic)
+            .map(|info| info.message_queues.is_empty())
+            .unwrap_or(true)
+    }
+
+    pub(crate) fn is_unit_mode(&self) -> bool {
+        false
     }
 }
 
 /// RocketMQ producer
+#[derive(Debug)]
 pub struct Producer {
-    inner: Arc<ProducerInner>,
-}
-
-impl fmt::Debug for Producer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Producer")
-            .field("group", &self.inner.group)
-            .field("options", &self.inner.options)
-            .finish()
-    }
+    inner: Arc<Mutex<ProducerInner>>,
+    options: ProducerOptions,
+    client: Client<Resolver>,
 }
 
 impl Producer {
+    pub fn new() -> Result<Self, Error> {
+        Self::with_options(ProducerOptions::default())
+    }
+
+    pub fn with_options(options: ProducerOptions) -> Result<Self, Error> {
+        let client_options = options.client_options.clone();
+        let name_server =
+            NameServer::new(options.resolver.clone(), client_options.credentials.clone())?;
+        Ok(Self {
+            inner: Arc::new(Mutex::new(ProducerInner::new())),
+            options,
+            client: Client::new(client_options, name_server),
+        })
+    }
+
     pub fn start(&self) {
-        self.inner
-            .client
-            .register_producer(&self.inner.group, Arc::clone(&self.inner));
-        self.inner.client.start();
+        self.client
+            .register_producer(&self.options.group_name(), Arc::clone(&self.inner));
+        self.client.start();
     }
 
     pub fn shutdown(&self) {
-        self.inner.client.unregister_producer(&self.inner.group);
-        self.inner.client.shutdown();
+        self.client.unregister_producer(&self.options.group_name());
+        self.client.shutdown();
     }
 }

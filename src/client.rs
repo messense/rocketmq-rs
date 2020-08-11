@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::process;
 use std::sync::{
@@ -21,6 +21,7 @@ use crate::protocol::{
 };
 use crate::remoting::RemotingClient;
 use crate::resolver::NsResolver;
+use crate::route::TopicRouteData;
 use crate::Error;
 
 #[derive(Debug, Clone)]
@@ -42,7 +43,7 @@ impl Credentials {
 
 #[derive(Debug, Clone)]
 pub struct ClientOptions {
-    group_name: String,
+    pub(crate) group_name: String,
     name_server_addrs: Vec<String>,
     // namesrv
     client_ip: String,
@@ -118,8 +119,8 @@ enum ClientState {
 pub struct Client<R: NsResolver + Clone> {
     options: ClientOptions,
     remote_client: RemotingClient,
-    consumers: Arc<Mutex<HashMap<String, Arc<ConsumerInner>>>>,
-    producers: Arc<Mutex<HashMap<String, Arc<ProducerInner>>>>,
+    consumers: Arc<Mutex<HashMap<String, Arc<Mutex<ConsumerInner>>>>>,
+    producers: Arc<Mutex<HashMap<String, Arc<Mutex<ProducerInner>>>>>,
     name_server: NameServer<R>,
     state: Arc<AtomicU8>,
     shutdown_tx: Arc<Mutex<Option<broadcast::Sender<()>>>>,
@@ -161,11 +162,11 @@ where
             ClientState::Created => {
                 self.state
                     .store(ClientState::StartFailed.into(), Ordering::SeqCst);
-                let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
+                let (shutdown_tx, mut shutdown_rx1) = broadcast::channel(1);
                 let mut shutdown_rx2 = shutdown_tx.subscribe();
                 self.shutdown_tx.lock().unwrap().replace(shutdown_tx);
 
-                // Update name server address
+                // Schedule update name server address
                 let name_server = self.name_server.clone();
                 tokio::spawn(async move {
                     time::delay_for(time::Duration::from_secs(10)).await;
@@ -178,14 +179,29 @@ where
                                     Err(err) => error!("name server address update failed: {:?}", err),
                                 };
                             }
-                            _ = shutdown_rx2.recv() => {
+                            _ = shutdown_rx1.recv() => {
                                 break;
                             }
                         }
                     }
                 });
 
-                // Update route info
+                // Schedule update route info
+                let client = self.clone();
+                tokio::spawn(async move {
+                    time::delay_for(time::Duration::from_millis(10)).await;
+                    let mut interval = time::interval(time::Duration::from_secs(30));
+                    loop {
+                        tokio::select! {
+                            _ = interval.tick() => {
+                                let _ = client.update_topic_route_info().await;
+                            }
+                            _ = shutdown_rx2.recv() => {
+                                break;
+                            }
+                        }
+                    }
+                });
 
                 // Send heartbeat to brokers
 
@@ -277,7 +293,7 @@ where
         })
     }
 
-    pub(crate) fn register_consumer(&self, group: &str, consumer: Arc<ConsumerInner>) {
+    pub(crate) fn register_consumer(&self, group: &str, consumer: Arc<Mutex<ConsumerInner>>) {
         let mut consumers = self.consumers.lock().unwrap();
         consumers.entry(group.to_string()).or_insert(consumer);
     }
@@ -287,7 +303,7 @@ where
         consumers.remove(group);
     }
 
-    pub(crate) fn register_producer(&self, group: &str, producer: Arc<ProducerInner>) {
+    pub(crate) fn register_producer(&self, group: &str, producer: Arc<Mutex<ProducerInner>>) {
         let mut producers = self.producers.lock().unwrap();
         producers.entry(group.to_string()).or_insert(producer);
     }
@@ -297,10 +313,46 @@ where
         producers.remove(group);
     }
 
-    fn rebalance_imediately(&self) {
+    fn rebalance_immediately(&self) {
         let consumers = self.consumers.lock().unwrap();
         for consumer in consumers.values() {
-            consumer.rebalance();
+            consumer.lock().unwrap().rebalance();
+        }
+    }
+
+    fn update_publish_info(&self, topic: &str, data: TopicRouteData, changed: bool) {
+        let producers = self.producers.lock().unwrap();
+        for producer in producers.values() {
+            let mut producer = producer.lock().unwrap();
+            let updated = if changed {
+                true
+            } else {
+                producer.is_publish_topic_need_update(topic)
+            };
+            if updated {
+                let mut publish_info = data.to_publish_info(topic);
+                publish_info.have_topic_router_info = true;
+                producer.update_topic_publish_info(topic, publish_info);
+            }
+        }
+    }
+
+    async fn update_topic_route_info(&self) {
+        let mut topics = HashSet::new();
+        {
+            let producers = self.producers.lock().unwrap();
+            for producer in producers.values() {
+                topics.extend(producer.lock().unwrap().publish_topic_list());
+            }
+        }
+
+        for topic in &topics {
+            match self.name_server.update_topic_route_info(topic).await {
+                Ok((route_data, changed)) => {
+                    self.update_publish_info(topic, route_data, changed);
+                }
+                Err(err) => error!("update topic {} route info failed: {:?}", topic, err),
+            }
         }
     }
 }

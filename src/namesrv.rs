@@ -73,14 +73,17 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
     }
 
     pub async fn query_topic_route_info(&self, topic: &str) -> Result<TopicRouteData, Error> {
-        let inner = self.inner.lock().unwrap();
-        if inner.servers.is_empty() {
-            return Err(Error::EmptyNameServers);
-        }
+        let servers = {
+            let inner = self.inner.lock().unwrap();
+            if inner.servers.is_empty() {
+                return Err(Error::EmptyNameServers);
+            }
+            inner.servers.clone()
+        };
         let header = GetRouteInfoRequestHeader {
             topic: topic.to_string(),
         };
-        for addr in &inner.servers {
+        for addr in &servers {
             let cmd = RemotingCommand::with_header(
                 RequestCode::GetRouteInfoByTopic,
                 header.clone(),
@@ -109,7 +112,10 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
         Err(Error::EmptyRouteData)
     }
 
-    pub async fn update_topic_route_info(&self, topic: &str) -> Result<bool, Error> {
+    pub async fn update_topic_route_info(
+        &self,
+        topic: &str,
+    ) -> Result<(TopicRouteData, bool), Error> {
         Ok(self
             .update_topic_route_info_with_default(topic, "", 0)
             .await?)
@@ -120,7 +126,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
         topic: &str,
         default_topic: &str,
         default_queue_num: i32,
-    ) -> Result<bool, Error> {
+    ) -> Result<(TopicRouteData, bool), Error> {
         let t = if !default_topic.is_empty() {
             default_topic
         } else {
@@ -147,9 +153,11 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
                     .broker_address_map
                     .insert(broker_data.broker_name.clone(), broker_data.clone());
             }
-            inner.route_data_map.insert(topic.to_string(), route_data);
+            inner
+                .route_data_map
+                .insert(topic.to_string(), route_data.clone());
         }
-        Ok(changed)
+        Ok((route_data, changed))
     }
 
     fn is_topic_route_data_changed(old_data: &TopicRouteData, new_data: &TopicRouteData) -> bool {
@@ -289,8 +297,8 @@ mod test {
             None,
         )
         .unwrap();
-        assert!(namesrv.update_topic_route_info(TOPIC).await.unwrap());
-        assert!(!namesrv.update_topic_route_info(TOPIC).await.unwrap());
+        assert!(namesrv.update_topic_route_info(TOPIC).await.unwrap().1);
+        assert!(!namesrv.update_topic_route_info(TOPIC).await.unwrap().1);
     }
 
     #[tokio::test]
