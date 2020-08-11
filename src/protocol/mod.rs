@@ -28,7 +28,6 @@ pub struct RemotingCommand {
 
 impl RemotingCommand {
     pub fn new(
-        opaque: i32,
         code: i16,
         flag: i32,
         remark: String,
@@ -40,7 +39,7 @@ impl RemotingCommand {
                 code,
                 language: LanguageCode::OTHER,
                 version: 431,
-                opaque,
+                opaque: 0,
                 flag,
                 remark,
                 ext_fields,
@@ -55,7 +54,7 @@ impl RemotingCommand {
         body: Vec<u8>,
     ) -> Self {
         let ext_fields = header.encode();
-        Self::new(0, code.into(), 0, String::new(), ext_fields, body)
+        Self::new(code.into(), 0, String::new(), ext_fields, body)
     }
 
     fn encode_codec_type(source: i32, codec: impl HeaderCodec) -> [u8; 4] {
@@ -166,14 +165,8 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let cmd = RemotingCommand::new(
-            1,
-            10,
-            0,
-            "remark".to_string(),
-            fields,
-            b"Hello World".to_vec(),
-        );
+        let cmd =
+            RemotingCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
         let mut encoded = BytesMut::new();
         cmd.encode_into(&mut encoded, JsonHeaderCodec).unwrap();
         let mut decoder = MqCodec;
@@ -186,14 +179,8 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let cmd = RemotingCommand::new(
-            1,
-            10,
-            0,
-            "remark".to_string(),
-            fields,
-            b"Hello World".to_vec(),
-        );
+        let cmd =
+            RemotingCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
         let mut encoded = BytesMut::new();
         cmd.encode_into(&mut encoded, RocketMQHeaderCodec).unwrap();
         let mut decoder = MqCodec;
@@ -206,14 +193,8 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let cmd = RemotingCommand::new(
-            1,
-            10,
-            0,
-            "remark".to_string(),
-            fields,
-            b"Hello World".to_vec(),
-        );
+        let cmd =
+            RemotingCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
         let mut codec = MqCodec;
         let mut encoded = BytesMut::new();
         codec.encode(cmd.clone(), &mut encoded).unwrap();
@@ -226,14 +207,8 @@ mod test {
         let mut fields = HashMap::new();
         fields.insert("messageId".to_string(), "123".to_string());
         fields.insert("offset".to_string(), "456".to_string());
-        let mut cmd = RemotingCommand::new(
-            1,
-            10,
-            0,
-            "remark".to_string(),
-            fields,
-            b"Hello World".to_vec(),
-        );
+        let mut cmd =
+            RemotingCommand::new(10, 0, "remark".to_string(), fields, b"Hello World".to_vec());
         assert!(!cmd.is_response_type());
 
         cmd.mark_response_type();

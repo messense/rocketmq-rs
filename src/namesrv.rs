@@ -20,6 +20,7 @@ struct NameServerInner {
     index: usize,
     // broker name -> BrokerData
     broker_address_map: HashMap<String, BrokerData>,
+    broker_version_map: HashMap<String, HashMap<String, i32>>,
     // topic name -> TopicRouteData
     route_data_map: HashMap<String, TopicRouteData>,
 }
@@ -38,6 +39,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
             servers,
             index: 0,
             broker_address_map: HashMap::new(),
+            broker_version_map: HashMap::new(),
             route_data_map: HashMap::new(),
         };
         // TODO: check addrs
@@ -48,13 +50,17 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
         })
     }
 
-    pub fn get_address(&self) -> String {
+    pub fn address(&self) -> String {
         let mut inner = self.inner.lock();
         let addr = &inner.servers[inner.index].clone();
         let mut index = inner.index + 1;
         index %= inner.servers.len();
         inner.index = index;
         addr.trim_start_matches("http(s)://").to_string()
+    }
+
+    pub fn broker_address_map(&self) -> HashMap<String, BrokerData> {
+        self.inner.lock().broker_address_map.clone()
     }
 
     pub fn len(&self) -> usize {
@@ -250,6 +256,15 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
             .broker_address_map
             .get(broker_name)
             .and_then(|broker_data| broker_data.broker_addrs.get(&MASTER_ID).cloned())
+    }
+
+    pub fn add_broker_version(&self, broker_name: &str, broker_addr: &str, version: i32) {
+        self.inner
+            .lock()
+            .broker_version_map
+            .entry(broker_name.to_string())
+            .or_default()
+            .insert(broker_addr.to_string(), version);
     }
 }
 

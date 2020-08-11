@@ -11,12 +11,12 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use parking_lot::Mutex;
 use tokio::sync::broadcast;
 use tokio::time;
-use tracing::{error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::consumer::ConsumerInner;
-use crate::message::MessageQueue;
 use crate::namesrv::NameServer;
 use crate::producer::{ProducerInner, PullResult, PullStatus};
+use crate::protocol::request::RequestCode::ResetConsumerOffset;
 use crate::protocol::{
     request::PullMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
 };
@@ -24,6 +24,8 @@ use crate::remoting::RemotingClient;
 use crate::resolver::NsResolver;
 use crate::route::TopicRouteData;
 use crate::Error;
+
+mod model;
 
 #[derive(Debug, Clone)]
 pub struct Credentials {
@@ -165,6 +167,7 @@ where
                     .store(ClientState::StartFailed.into(), Ordering::SeqCst);
                 let (shutdown_tx, mut shutdown_rx1) = broadcast::channel(1);
                 let mut shutdown_rx2 = shutdown_tx.subscribe();
+                let mut shutdown_rx3 = shutdown_tx.subscribe();
                 self.shutdown_tx.lock().replace(shutdown_tx);
 
                 // Schedule update name server address
@@ -204,7 +207,22 @@ where
                     }
                 });
 
-                // Send heartbeat to brokers
+                // Schedule send heartbeat to all brokers
+                let client = self.clone();
+                tokio::spawn(async move {
+                    time::delay_for(time::Duration::from_secs(1)).await;
+                    let mut interval = time::interval(time::Duration::from_secs(30));
+                    loop {
+                        tokio::select! {
+                            _ = interval.tick() => {
+                                let _ = client.send_heartbeat_to_all_brokers().await;
+                            }
+                            _ = shutdown_rx3.recv() => {
+                                break;
+                            }
+                        }
+                    }
+                });
 
                 // Persist offset
 
@@ -318,6 +336,77 @@ where
         let consumers = self.consumers.lock();
         for consumer in consumers.values() {
             consumer.lock().rebalance();
+        }
+    }
+
+    async fn send_heartbeat_to_all_brokers(&self) {
+        use model::{HeartbeatData, ProducerData};
+
+        let producer_data_set: Vec<ProducerData> = self
+            .producers
+            .lock()
+            .keys()
+            .map(|group_name| ProducerData {
+                group_name: group_name.clone(),
+            })
+            .collect();
+        // FIXME
+        let consumer_data_set = Vec::new();
+        if producer_data_set.is_empty() && consumer_data_set.is_empty() {
+            info!("sending heartbeat, but no producer and no consumer found");
+            return;
+        }
+        let heartbeat_data = HeartbeatData {
+            client_id: self.id(),
+            producer_data_set,
+            consumer_data_set,
+        };
+        let hb_bytes = serde_json::to_vec(&heartbeat_data).unwrap();
+        for (broker_name, broker_data) in self.name_server.broker_address_map() {
+            for (id, addr) in &broker_data.broker_addrs {
+                if heartbeat_data.consumer_data_set.is_empty() && *id != 0 {
+                    continue;
+                }
+                debug!(
+                    broker_name = &broker_name[..],
+                    broker_id = id,
+                    broker_addr = &addr[..],
+                    "try to send heart beat to broker",
+                );
+                let cmd = RemotingCommand::new(
+                    RequestCode::Heartbeat.into(),
+                    0,
+                    String::new(),
+                    HashMap::new(),
+                    hb_bytes.clone(),
+                );
+                match self.remote_client.invoke(addr, cmd).await {
+                    Ok(res) => match ResponseCode::try_from(res.code()) {
+                        Ok(ResponseCode::Success) => {
+                            self.name_server.add_broker_version(
+                                &broker_name,
+                                addr,
+                                res.header.version as i32,
+                            );
+                            info!(
+                                broker_name = &broker_name[..],
+                                broker_id = id,
+                                broker_addr = &addr[..],
+                                "send heart beat to broker success",
+                            );
+                        }
+                        _ => {
+                            warn!(
+                                broker_name = &broker_name[..],
+                                broker_id = id,
+                                broker_addr = &addr[..],
+                                "send heart beat to broker failed",
+                            );
+                        }
+                    },
+                    Err(err) => warn!("send heart beat to broker {} error {:?}", id, err),
+                }
+            }
         }
     }
 
