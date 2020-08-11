@@ -176,3 +176,11 @@ impl Connection {
         &self.sender
     }
 }
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.sender.receiver_shutdown.take() {
+            let _ = shutdown.send(());
+        }
+    }
+}

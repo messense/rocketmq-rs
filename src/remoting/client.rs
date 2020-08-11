@@ -79,6 +79,11 @@ impl RemotingClient {
         }
     }
 
+    pub fn shutdown(&self) {
+        let mut connections = self.connections.lock().unwrap();
+        connections.clear();
+    }
+
     async fn connect(&self, addr: &str) -> Result<Arc<Connection>, Error> {
         let rx = {
             match self

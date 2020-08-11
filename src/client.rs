@@ -195,7 +195,22 @@ where
         }
     }
 
-    pub fn shutdown(&self) {}
+    pub fn shutdown(&self) {
+        match ClientState::try_from(
+            self.state
+                .swap(ClientState::Shutdown.into(), Ordering::Relaxed),
+        )
+        .unwrap()
+        {
+            ClientState::Shutdown => {} // shutdown already
+            _ => {
+                if let Some(tx) = &*self.shutdown_tx.lock().unwrap() {
+                    tx.send(()).unwrap();
+                }
+                self.remote_client.shutdown();
+            }
+        }
+    }
 
     #[inline]
     pub async fn invoke(&self, addr: &str, cmd: RemotingCommand) -> Result<RemotingCommand, Error> {
