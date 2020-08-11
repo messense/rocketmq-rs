@@ -139,7 +139,8 @@ impl ProducerInner {
 
     fn with_options(group: &str, options: ProducerOptions) -> Result<Self, Error> {
         let client_options = ClientOptions::new(group);
-        let name_server = NameServer::new(options.resolver.clone())?;
+        // FIXME: credentials
+        let name_server = NameServer::new(options.resolver.clone(), None)?;
         Ok(Self {
             group: group.to_string(),
             options,
