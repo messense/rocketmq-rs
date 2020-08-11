@@ -1,8 +1,13 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::process;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    Arc, Mutex,
+};
 
 use if_addrs::get_if_addrs;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use tokio::sync::oneshot;
 use tokio::time;
 
@@ -99,6 +104,15 @@ fn client_ipv4() -> String {
     "127.0.0.1".to_string()
 }
 
+#[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+enum ClientState {
+    Created = 0,
+    StartFailed = 1,
+    Running = 2,
+    Shutdown = 3,
+}
+
 #[derive(Debug)]
 pub struct Client<R: NsResolver + Clone> {
     options: ClientOptions,
@@ -106,7 +120,7 @@ pub struct Client<R: NsResolver + Clone> {
     consumers: Arc<Mutex<HashMap<String, Arc<ConsumerInner>>>>,
     producers: Arc<Mutex<HashMap<String, Arc<ProducerInner>>>>,
     name_server: NameServer<R>,
-    once: Once,
+    state: AtomicU8,
     shutdown_tx: oneshot::Sender<()>,
     shutdown_rx: oneshot::Receiver<()>,
 }
@@ -124,7 +138,7 @@ where
             consumers: Arc::new(Mutex::new(HashMap::new())),
             producers: Arc::new(Mutex::new(HashMap::new())),
             name_server,
-            once: Once::new(),
+            state: AtomicU8::new(ClientState::Created.into()),
             shutdown_tx,
             shutdown_rx,
         }
@@ -145,26 +159,33 @@ where
     }
 
     pub fn start(&self) {
-        self.once.call_once(|| {
-            // Update name server address
-            let name_server = self.name_server.clone();
-            tokio::spawn(async move {
-                time::delay_for(time::Duration::from_secs(10)).await;
-                let mut interval = time::interval(time::Duration::from_secs(2 * 60));
-                loop {
-                    interval.tick().await;
-                    let _res = name_server.update_name_server_address();
-                }
-            });
+        match ClientState::try_from(self.state.load(Ordering::SeqCst)).unwrap() {
+            ClientState::Created => {
+                self.state
+                    .store(ClientState::StartFailed.into(), Ordering::SeqCst);
+                // Update name server address
+                let name_server = self.name_server.clone();
+                tokio::spawn(async move {
+                    time::delay_for(time::Duration::from_secs(10)).await;
+                    let mut interval = time::interval(time::Duration::from_secs(2 * 60));
+                    loop {
+                        interval.tick().await;
+                        let _res = name_server.update_name_server_address();
+                    }
+                });
 
-            // Update route info
+                // Update route info
 
-            // Send heartbeat to brokers
+                // Send heartbeat to brokers
 
-            // Persist offset
+                // Persist offset
 
-            // Rebalance
-        })
+                // Rebalance
+                self.state
+                    .store(ClientState::Running.into(), Ordering::SeqCst);
+            }
+            _ => {}
+        }
     }
 
     pub fn shutdown(&self) {}
