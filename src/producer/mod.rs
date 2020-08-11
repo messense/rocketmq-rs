@@ -2,7 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::client::{Client, ClientOptions, InnerProducer};
+use crate::client::{Client, ClientOptions};
 use crate::message::MessageExt;
 use crate::namesrv::NameServer;
 use crate::resolver::{HttpResolver, NsResolver, PassthroughResolver};
@@ -32,12 +32,12 @@ pub struct PullResult {
     pub body: Vec<u8>,
 }
 
-pub struct ProducerOptions {
+pub struct ProducerOptions<R: NsResolver = HttpResolver> {
     selector: Box<dyn QueueSelector>,
     send_msg_timeout: Duration,
     default_topic_queue_nums: usize,
     create_topic_key: String,
-    resolver: Box<dyn NsResolver>,
+    resolver: R,
 }
 
 impl fmt::Debug for ProducerOptions {
@@ -58,7 +58,7 @@ impl Default for ProducerOptions {
             send_msg_timeout: Duration::from_secs(3),
             default_topic_queue_nums: 4,
             create_topic_key: "TBW102".to_string(),
-            resolver: Box::new(HttpResolver::new("DEFAULT".to_string())),
+            resolver: HttpResolver::new("DEFAULT".to_string()),
         }
     }
 }
@@ -83,32 +83,39 @@ impl ProducerOptions {
         self
     }
 
-    pub fn set_resolver<R: NsResolver + 'static>(&mut self, resolver: R) -> &mut Self {
-        self.resolver = Box::new(resolver);
-        self
-    }
-
-    pub fn set_name_server(&mut self, addrs: Vec<String>) -> &mut Self {
-        self.resolver = Box::new(PassthroughResolver::new(
-            addrs,
-            HttpResolver::new("DEFAULT".to_string()),
-        ));
-        self
-    }
-
     pub fn set_name_server_domain(&mut self, url: &str) -> &mut Self {
-        self.resolver = Box::new(HttpResolver::with_domain(
-            "DEFAULT".to_string(),
-            url.to_string(),
-        ));
+        self.resolver = HttpResolver::with_domain("DEFAULT".to_string(), url.to_string());
         self
     }
 }
 
-struct ProducerInner {
+impl<R: NsResolver> ProducerOptions<R> {
+    pub fn set_resolver(&mut self, resolver: R) -> &mut Self {
+        self.resolver = resolver;
+        self
+    }
+}
+
+impl ProducerOptions<PassthroughResolver<HttpResolver>> {
+    pub fn set_name_server(&mut self, addrs: Vec<String>) -> &mut Self {
+        self.resolver = PassthroughResolver::new(addrs, HttpResolver::new("DEFAULT".to_string()));
+        self
+    }
+}
+
+pub(crate) struct ProducerInner {
     group: String,
     options: ProducerOptions,
-    client: Client<Self, crate::consumer::Consumer, Box<dyn NsResolver>>,
+    client: Client<HttpResolver>,
+}
+
+impl fmt::Debug for ProducerInner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Producer")
+            .field("group", &self.group)
+            .field("options", &self.options)
+            .finish()
+    }
 }
 
 impl ProducerInner {
@@ -118,26 +125,12 @@ impl ProducerInner {
 
     fn with_options(group: &str, options: ProducerOptions) -> Result<Self, Error> {
         let client_options = ClientOptions::new(group);
-        let name_server = NameServer::new(dyn_clone::clone_box(&*options.resolver), None)?;
+        let name_server = NameServer::new(options.resolver.clone())?;
         Ok(Self {
             group: group.to_string(),
             options,
             client: Client::new(client_options, name_server),
         })
-    }
-}
-
-impl InnerProducer for ProducerInner {
-    fn publish_topic_list(&self) -> Vec<String> {
-        unimplemented!()
-    }
-
-    fn update_topic_publish_info(&self) {
-        unimplemented!()
-    }
-
-    fn is_publish_topic_need_update(&self, topic: &str) -> bool {
-        unimplemented!()
     }
 }
 
@@ -166,23 +159,5 @@ impl Producer {
     pub fn shutdown(&self) {
         self.inner.client.unregister_producer(&self.inner.group);
         self.inner.client.shutdown();
-    }
-}
-
-impl InnerProducer for Producer {
-    fn publish_topic_list(&self) -> Vec<String> {
-        self.inner.publish_topic_list()
-    }
-
-    fn update_topic_publish_info(&self) {
-        self.inner.update_topic_publish_info()
-    }
-
-    fn is_publish_topic_need_update(&self, topic: &str) -> bool {
-        self.inner.is_publish_topic_need_update(topic)
-    }
-
-    fn is_unit_mode(&self) -> bool {
-        self.inner.is_unit_mode()
     }
 }

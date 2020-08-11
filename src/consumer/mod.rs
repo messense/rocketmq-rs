@@ -1,36 +1,19 @@
-use crate::client::InnerConsumer;
+use std::fmt;
+use std::sync::Arc;
+
 use crate::message::MessageQueue;
 use crate::Error;
 
 #[derive(Debug)]
-pub struct Consumer {}
+pub(crate) struct ConsumerInner {}
 
-impl InnerConsumer for Consumer {
-    fn persist_consumer_offset(&self) -> Result<(), Error> {
-        unimplemented!()
+impl ConsumerInner {
+    pub fn rebalance(&self) {
+        todo!()
     }
+}
 
-    fn update_topic_subscribe_info(&self, topic: &str, mqs: &[MessageQueue]) {
-        unimplemented!()
-    }
-
-    fn is_subscribe_topic_need_update(&self, topic: &str) -> bool {
-        unimplemented!()
-    }
-
-    fn rebalance(&self) {
-        unimplemented!()
-    }
-
-    fn get_c_type(&self) -> String {
-        unimplemented!()
-    }
-
-    fn get_model(&self) -> String {
-        unimplemented!()
-    }
-
-    fn get_where(&self) -> String {
-        unimplemented!()
-    }
+#[derive(Debug)]
+pub struct Consumer {
+    inner: Arc<ConsumerInner>,
 }

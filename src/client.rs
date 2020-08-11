@@ -6,57 +6,16 @@ use if_addrs::get_if_addrs;
 use tokio::sync::oneshot;
 use tokio::time;
 
+use crate::consumer::ConsumerInner;
 use crate::message::MessageQueue;
 use crate::namesrv::NameServer;
-use crate::producer::{PullResult, PullStatus};
+use crate::producer::{ProducerInner, PullResult, PullStatus};
 use crate::protocol::{
     request::PullMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::remoting::RemotingClient;
 use crate::resolver::NsResolver;
 use crate::Error;
-
-pub trait InnerProducer {
-    fn publish_topic_list(&self) -> Vec<String>;
-    fn update_topic_publish_info(&self);
-    fn is_publish_topic_need_update(&self, topic: &str) -> bool;
-    fn is_unit_mode(&self) -> bool {
-        false
-    }
-}
-
-impl<T: InnerProducer> InnerProducer for Arc<T> {
-    fn publish_topic_list(&self) -> Vec<String> {
-        (*self).publish_topic_list()
-    }
-
-    fn update_topic_publish_info(&self) {
-        (*self).update_topic_publish_info()
-    }
-
-    fn is_publish_topic_need_update(&self, topic: &str) -> bool {
-        (*self).is_publish_topic_need_update(topic)
-    }
-
-    fn is_unit_mode(&self) -> bool {
-        (*self).is_unit_mode()
-    }
-}
-
-pub trait InnerConsumer {
-    fn persist_consumer_offset(&self) -> Result<(), Error>;
-    fn update_topic_subscribe_info(&self, topic: &str, mqs: &[MessageQueue]);
-    fn is_subscribe_topic_need_update(&self, topic: &str) -> bool;
-    // fn subscription_data_list(&self);
-    fn rebalance(&self);
-    fn is_unit_mode(&self) -> bool {
-        false
-    }
-    // fn get_consumer_running_info(&self);
-    fn get_c_type(&self) -> String;
-    fn get_model(&self) -> String;
-    fn get_where(&self) -> String;
-}
 
 #[derive(Debug, Clone)]
 pub struct Credentials {
@@ -141,18 +100,18 @@ fn client_ipv4() -> String {
 }
 
 #[derive(Debug)]
-pub struct Client<P: InnerProducer, C: InnerConsumer, R: NsResolver> {
+pub struct Client<R: NsResolver> {
     options: ClientOptions,
     remote_client: RemotingClient,
-    consumers: Arc<Mutex<HashMap<String, Arc<C>>>>,
-    producers: Arc<Mutex<HashMap<String, Arc<P>>>>,
+    consumers: Arc<Mutex<HashMap<String, Arc<ConsumerInner>>>>,
+    producers: Arc<Mutex<HashMap<String, Arc<ProducerInner>>>>,
     name_server: NameServer<R>,
     once: Once,
     shutdown_tx: oneshot::Sender<()>,
     shutdown_rx: oneshot::Receiver<()>,
 }
 
-impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
+impl<R: NsResolver> Client<R> {
     pub fn new(options: ClientOptions, name_server: NameServer<R>) -> Self {
         let credentials = options.credentials.clone();
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -267,22 +226,22 @@ impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
         })
     }
 
-    pub fn register_consumer(&self, group: &str, consumer: Arc<C>) {
+    pub(crate) fn register_consumer(&self, group: &str, consumer: Arc<ConsumerInner>) {
         let mut consumers = self.consumers.lock().unwrap();
         consumers.entry(group.to_string()).or_insert(consumer);
     }
 
-    pub fn unregister_consumer(&self, group: &str) {
+    pub(crate) fn unregister_consumer(&self, group: &str) {
         let mut consumers = self.consumers.lock().unwrap();
         consumers.remove(group);
     }
 
-    pub fn register_producer(&self, group: &str, producer: Arc<P>) {
+    pub(crate) fn register_producer(&self, group: &str, producer: Arc<ProducerInner>) {
         let mut producers = self.producers.lock().unwrap();
         producers.entry(group.to_string()).or_insert(producer);
     }
 
-    pub fn unregister_producer(&self, group: &str) {
+    pub(crate) fn unregister_producer(&self, group: &str) {
         let mut producers = self.producers.lock().unwrap();
         producers.remove(group);
     }

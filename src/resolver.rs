@@ -1,17 +1,13 @@
 use std::env;
 
-use dyn_clone::DynClone;
-
 use crate::Error;
 
 const DEFAULT_NAMESRV_ADDR: &'static str = "http://jmenv.tbsite.net:8080/rocketmq/nsaddr";
 
-pub trait NsResolver: DynClone {
+pub trait NsResolver {
     fn resolve(&self) -> Result<Vec<String>, Error>;
     fn description(&self) -> &'static str;
 }
-
-dyn_clone::clone_trait_object!(NsResolver);
 
 impl NsResolver for Box<dyn NsResolver> {
     fn resolve(&self) -> Result<Vec<String>, Error> {
