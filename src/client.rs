@@ -10,6 +10,7 @@ use if_addrs::get_if_addrs;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use tokio::sync::broadcast;
 use tokio::time;
+use tracing::{error, info};
 
 use crate::consumer::ConsumerInner;
 use crate::message::MessageQueue;
@@ -160,7 +161,7 @@ where
             ClientState::Created => {
                 self.state
                     .store(ClientState::StartFailed.into(), Ordering::SeqCst);
-                let (shutdown_tx, mut shutdown_rx) = broadcast::channel(1);
+                let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
                 let mut shutdown_rx2 = shutdown_tx.subscribe();
                 self.shutdown_tx.lock().unwrap().replace(shutdown_tx);
 
@@ -172,7 +173,10 @@ where
                     loop {
                         tokio::select! {
                             _ = interval.tick() => {
-                                let _res = name_server.update_name_server_address();
+                                match name_server.update_name_server_address() {
+                                    Ok(_) => info!("name server addresses update succeed"),
+                                    Err(err) => error!("name server address update failed: {:?}", err),
+                                };
                             }
                             _ = shutdown_rx2.recv() => {
                                 break;

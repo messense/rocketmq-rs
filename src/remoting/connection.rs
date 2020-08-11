@@ -8,6 +8,7 @@ use futures::{
 };
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
+use tracing::info;
 
 use crate::error::{ConnectionError, Error};
 use crate::protocol::{MqCodec, RemotingCommand};
@@ -138,6 +139,7 @@ impl Connection {
     }
 
     async fn prepare_stream(addr: String) -> Result<ConnectionSender, Error> {
+        info!("connecting to {}", &addr);
         let stream = TcpStream::connect(&addr)
             .await
             .map(|stream| tokio_util::codec::Framed::new(stream, MqCodec))?;
@@ -180,6 +182,7 @@ impl Connection {
 impl Drop for Connection {
     fn drop(&mut self) {
         if let Some(shutdown) = self.sender.receiver_shutdown.take() {
+            info!("shutting down connection to {}", &self.addr);
             let _ = shutdown.send(());
         }
     }
