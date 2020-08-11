@@ -50,6 +50,7 @@ pub struct Message {
     properties: HashMap<String, String>,
     body: Vec<u8>,
     transaction_id: String,
+    batch: bool,
     pub(crate) queue: Option<MessageQueue>,
 }
 
@@ -80,6 +81,7 @@ impl Message {
             body,
             properties: props,
             transaction_id: String::new(),
+            batch: false,
             queue: None,
         }
     }
@@ -212,6 +214,7 @@ impl MessageExt {
                 properties,
                 body,
                 transaction_id: String::new(),
+                batch: false,
                 queue: None,
             };
             let msg_id = msg.unique_key().unwrap_or_else(|| {

@@ -56,7 +56,7 @@ pub struct ClientOptions {
     vip_channel_enabled: bool,
     retry_times: usize,
     pub(crate) credentials: Option<Credentials>,
-    namespace: String,
+    pub(crate) namespace: String,
     // resolver
 }
 

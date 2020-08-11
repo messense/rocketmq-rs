@@ -9,6 +9,7 @@ use crate::client::{Client, ClientOptions};
 use crate::message::{Message, MessageExt, MessageQueue};
 use crate::namesrv::NameServer;
 use crate::producer::selector::QueueSelect;
+use crate::protocol::RemotingCommand;
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
 use crate::Error;
@@ -35,6 +36,28 @@ pub struct PullResult {
     pub suggest_which_broker_id: i64,
     pub message_exts: Vec<MessageExt>,
     pub body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(i32)]
+pub enum SendStatus {
+    Ok = 0,
+    FlushDiskTimeout = 1,
+    FlushSlaveTimeout = 2,
+    SlaveNotAvailable = 3,
+    UnknownError = 4,
+}
+
+#[derive(Debug, Clone)]
+pub struct SendResult {
+    pub status: SendStatus,
+    pub msg_id: String,
+    pub message_queue: MessageQueue,
+    pub queue_offset: i64,
+    pub transaction_id: Option<String>,
+    pub offset_msg_id: String,
+    pub region_id: String,
+    pub trace_on: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -186,6 +209,36 @@ impl Producer {
     pub fn shutdown(&self) {
         self.client.unregister_producer(&self.options.group_name());
         self.client.shutdown();
+    }
+
+    pub async fn send(&self, msg: Message) -> Result<SendResult, Error> {
+        let mut msg = msg;
+        let namespace = &self.options.client_options.namespace;
+        if !namespace.is_empty() {
+            msg.topic = format!("{}%{}", namespace, msg.topic);
+        }
+        // FIXME: define a ProducerError
+        let mq = self.select_message_queue(&msg).await?.unwrap();
+        let addr = self
+            .client
+            .name_server
+            .find_broker_addr_by_name(&mq.broker_name)
+            .unwrap();
+        let cmd = self.build_send_request(&mq, msg.clone());
+        let res = self.client.invoke(&addr, cmd).await?;
+        Self::process_send_response(&mq.broker_name, res, &[msg])
+    }
+
+    fn build_send_request(&self, mq: &MessageQueue, mut msg: Message) -> RemotingCommand {
+        todo!()
+    }
+
+    fn process_send_response(
+        broker_name: &str,
+        cmd: RemotingCommand,
+        msgs: &[Message],
+    ) -> Result<SendResult, Error> {
+        todo!()
     }
 
     async fn select_message_queue(&self, msg: &Message) -> Result<Option<MessageQueue>, Error> {
