@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use hmac::{Hmac, Mac, NewMac};
+use parking_lot::Mutex;
 use tokio::sync::oneshot;
 
 use super::connection::Connection;
@@ -59,7 +60,7 @@ impl RemotingClient {
 
     pub async fn get_connection(&self, addr: &str) -> Result<Arc<Connection>, Error> {
         let rx = {
-            match self.connections.lock().unwrap().get_mut(addr) {
+            match self.connections.lock().get_mut(addr) {
                 None => None,
                 Some(ConnectionStatus::Connected(conn)) => return Ok(conn.clone()),
                 Some(ConnectionStatus::Connecting(ref mut v)) => {
@@ -79,7 +80,7 @@ impl RemotingClient {
     }
 
     pub fn shutdown(&self) {
-        let mut connections = self.connections.lock().unwrap();
+        let mut connections = self.connections.lock();
         connections.clear();
     }
 
@@ -88,7 +89,6 @@ impl RemotingClient {
             match self
                 .connections
                 .lock()
-                .unwrap()
                 .entry(addr.to_string())
                 .or_insert_with(|| ConnectionStatus::Connecting(Vec::new()))
             {
@@ -113,7 +113,7 @@ impl RemotingClient {
         // FIXME: connection backoff
         let conn = Connection::new(addr).await?;
         let c = Arc::new(conn);
-        let old = self.connections.lock().unwrap().insert(
+        let old = self.connections.lock().insert(
             addr.to_string(),
             ConnectionStatus::Connected(Arc::clone(&c)),
         );

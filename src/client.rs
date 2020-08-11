@@ -3,11 +3,12 @@ use std::convert::TryFrom;
 use std::process;
 use std::sync::{
     atomic::{AtomicU8, Ordering},
-    Arc, Mutex,
+    Arc,
 };
 
 use if_addrs::get_if_addrs;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use parking_lot::Mutex;
 use tokio::sync::broadcast;
 use tokio::time;
 use tracing::{error, info};
@@ -164,7 +165,7 @@ where
                     .store(ClientState::StartFailed.into(), Ordering::SeqCst);
                 let (shutdown_tx, mut shutdown_rx1) = broadcast::channel(1);
                 let mut shutdown_rx2 = shutdown_tx.subscribe();
-                self.shutdown_tx.lock().unwrap().replace(shutdown_tx);
+                self.shutdown_tx.lock().replace(shutdown_tx);
 
                 // Schedule update name server address
                 let name_server = self.name_server.clone();
@@ -224,7 +225,7 @@ where
         {
             ClientState::Shutdown => {} // shutdown already
             _ => {
-                if let Some(tx) = &*self.shutdown_tx.lock().unwrap() {
+                if let Some(tx) = &*self.shutdown_tx.lock() {
                     tx.send(()).unwrap();
                 }
                 self.remote_client.shutdown();
@@ -294,36 +295,36 @@ where
     }
 
     pub(crate) fn register_consumer(&self, group: &str, consumer: Arc<Mutex<ConsumerInner>>) {
-        let mut consumers = self.consumers.lock().unwrap();
+        let mut consumers = self.consumers.lock();
         consumers.entry(group.to_string()).or_insert(consumer);
     }
 
     pub(crate) fn unregister_consumer(&self, group: &str) {
-        let mut consumers = self.consumers.lock().unwrap();
+        let mut consumers = self.consumers.lock();
         consumers.remove(group);
     }
 
     pub(crate) fn register_producer(&self, group: &str, producer: Arc<Mutex<ProducerInner>>) {
-        let mut producers = self.producers.lock().unwrap();
+        let mut producers = self.producers.lock();
         producers.entry(group.to_string()).or_insert(producer);
     }
 
     pub(crate) fn unregister_producer(&self, group: &str) {
-        let mut producers = self.producers.lock().unwrap();
+        let mut producers = self.producers.lock();
         producers.remove(group);
     }
 
     fn rebalance_immediately(&self) {
-        let consumers = self.consumers.lock().unwrap();
+        let consumers = self.consumers.lock();
         for consumer in consumers.values() {
-            consumer.lock().unwrap().rebalance();
+            consumer.lock().rebalance();
         }
     }
 
     fn update_publish_info(&self, topic: &str, data: TopicRouteData, changed: bool) {
-        let producers = self.producers.lock().unwrap();
+        let producers = self.producers.lock();
         for producer in producers.values() {
-            let mut producer = producer.lock().unwrap();
+            let mut producer = producer.lock();
             let updated = if changed {
                 true
             } else {
@@ -340,9 +341,9 @@ where
     async fn update_topic_route_info(&self) {
         let mut topics = HashSet::new();
         {
-            let producers = self.producers.lock().unwrap();
+            let producers = self.producers.lock();
             for producer in producers.values() {
-                topics.extend(producer.lock().unwrap().publish_topic_list());
+                topics.extend(producer.lock().publish_topic_list());
             }
         }
 

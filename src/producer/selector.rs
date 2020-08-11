@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::hash::Hasher;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 use crate::message::{Message, MessageQueue};
 
@@ -72,7 +74,7 @@ impl RoundRobinQueueSelector {
 impl QueueSelect for RoundRobinQueueSelector {
     fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
         let topic = msg.topic();
-        let mut indexer = self.indexer.lock().unwrap();
+        let mut indexer = self.indexer.lock();
         let i = indexer
             .entry(topic.to_string())
             .and_modify(|e| *e = e.wrapping_add(1))

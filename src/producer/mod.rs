@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
+
+use parking_lot::Mutex;
 
 use crate::client::{Client, ClientOptions};
 use crate::message::{Message, MessageExt, MessageQueue};

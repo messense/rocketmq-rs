@@ -1,6 +1,7 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
+use parking_lot::Mutex;
 use rand::prelude::*;
 
 use crate::client::Credentials;
@@ -48,7 +49,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
     }
 
     pub fn get_address(&self) -> String {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         let addr = &inner.servers[inner.index].clone();
         let mut index = inner.index + 1;
         index %= inner.servers.len();
@@ -57,15 +58,15 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
     }
 
     pub fn len(&self) -> usize {
-        self.inner.lock().unwrap().servers.len()
+        self.inner.lock().servers.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.inner.lock().unwrap().servers.is_empty()
+        self.inner.lock().servers.is_empty()
     }
 
     pub fn update_name_server_address(&self) -> Result<(), Error> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         if let Ok(servers) = self.resolver.resolve() {
             inner.servers = servers;
         }
@@ -74,7 +75,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
 
     pub async fn query_topic_route_info(&self, topic: &str) -> Result<TopicRouteData, Error> {
         let servers = {
-            let inner = self.inner.lock().unwrap();
+            let inner = self.inner.lock();
             if inner.servers.is_empty() {
                 return Err(Error::EmptyNameServers);
             }
@@ -141,7 +142,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
                 }
             }
         }
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         let changed = inner
             .route_data_map
             .get(topic)
@@ -199,7 +200,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
         &self,
         topic: &str,
     ) -> Result<Vec<MessageQueue>, Error> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         if let Some(route_data) = inner.route_data_map.get(topic) {
             let publish_info = route_data.to_publish_info(topic);
             Ok(publish_info.message_queues)
@@ -207,7 +208,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
             // Avoid deadlock
             drop(inner);
             let route_data = self.query_topic_route_info(topic).await?;
-            let mut inner = self.inner.lock().unwrap();
+            let mut inner = self.inner.lock();
             inner
                 .route_data_map
                 .insert(topic.to_string(), route_data.clone());
@@ -223,7 +224,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
     }
 
     pub fn find_broker_addr_by_topic(&self, topic: &str) -> Option<String> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         if let Some(route_data) = inner.route_data_map.get(topic) {
             if route_data.broker_datas.is_empty() {
                 return None;
@@ -244,7 +245,7 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
     }
 
     pub fn find_broker_addr_by_name(&self, broker_name: &str) -> Option<String> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner
             .broker_address_map
             .get(broker_name)
