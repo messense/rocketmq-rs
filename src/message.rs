@@ -45,7 +45,7 @@ pub struct MessageQueue {
 
 #[derive(Debug, Clone)]
 pub struct Message {
-    topic: String,
+    pub(crate) topic: String,
     flag: i32,
     properties: HashMap<String, String>,
     body: Vec<u8>,
@@ -98,6 +98,7 @@ impl Message {
             .and_then(|val| if val.is_empty() { None } else { Some(val) })
     }
 
+    #[inline]
     pub fn topic(&self) -> &str {
         &self.topic
     }

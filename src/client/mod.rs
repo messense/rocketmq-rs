@@ -124,7 +124,7 @@ pub struct Client<R: NsResolver + Clone> {
     remote_client: RemotingClient,
     consumers: Arc<Mutex<HashMap<String, Arc<Mutex<ConsumerInner>>>>>,
     producers: Arc<Mutex<HashMap<String, Arc<Mutex<ProducerInner>>>>>,
-    name_server: NameServer<R>,
+    pub(crate) name_server: NameServer<R>,
     state: Arc<AtomicU8>,
     shutdown_tx: Arc<Mutex<Option<broadcast::Sender<()>>>>,
 }
@@ -417,7 +417,7 @@ where
         }
     }
 
-    fn update_publish_info(&self, topic: &str, data: TopicRouteData, changed: bool) {
+    pub fn update_publish_info(&self, topic: &str, data: TopicRouteData, changed: bool) {
         let producers = self.producers.lock();
         for producer in producers.values() {
             let mut producer = producer.lock();

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
 
 use rand::prelude::*;
 use serde::Deserialize;
@@ -90,7 +89,7 @@ impl TopicRouteData {
                 have_topic_router_info: false,
                 route_data: self.clone(),
                 message_queues: mqs,
-                queue_index: AtomicUsize::new(0),
+                queue_index: 0,
             };
         }
         for qd in self.queue_datas.iter().rev() {
@@ -124,18 +123,18 @@ impl TopicRouteData {
             have_topic_router_info: false,
             route_data: self.clone(),
             message_queues: mqs,
-            queue_index: AtomicUsize::new(0),
+            queue_index: 0,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TopicPublishInfo {
     pub order_topic: bool,
     pub have_topic_router_info: bool,
     pub message_queues: Vec<MessageQueue>,
     pub route_data: TopicRouteData,
-    pub queue_index: AtomicUsize,
+    pub queue_index: usize,
 }
 
 impl TopicPublishInfo {

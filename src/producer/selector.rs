@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use crate::message::{Message, MessageQueue};
 
 pub trait QueueSelect {
-    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue;
+    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> Option<MessageQueue>;
 }
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub enum QueueSelector {
 }
 
 impl QueueSelect for QueueSelector {
-    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
+    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> Option<MessageQueue> {
         match self {
             QueueSelector::Manual(inner) => inner.select(msg, mqs),
             QueueSelector::Random(inner) => inner.select(msg, mqs),
@@ -39,9 +39,9 @@ impl Default for QueueSelector {
 pub struct ManualQueueSelector;
 
 impl QueueSelect for ManualQueueSelector {
-    fn select(&self, msg: &Message, _mqs: &[MessageQueue]) -> MessageQueue {
-        let mq = msg.queue.as_ref().unwrap();
-        mq.clone()
+    fn select(&self, msg: &Message, _mqs: &[MessageQueue]) -> Option<MessageQueue> {
+        let mq = msg.queue.as_ref();
+        mq.cloned()
     }
 }
 
@@ -49,11 +49,11 @@ impl QueueSelect for ManualQueueSelector {
 pub struct RandomQueueSelector;
 
 impl QueueSelect for RandomQueueSelector {
-    fn select(&self, _msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
+    fn select(&self, _msg: &Message, mqs: &[MessageQueue]) -> Option<MessageQueue> {
         use rand::prelude::*;
 
         let mut rng = thread_rng();
-        mqs.iter().choose(&mut rng).unwrap().clone()
+        mqs.iter().choose(&mut rng).cloned()
     }
 }
 
@@ -72,7 +72,7 @@ impl RoundRobinQueueSelector {
 }
 
 impl QueueSelect for RoundRobinQueueSelector {
-    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
+    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> Option<MessageQueue> {
         let topic = msg.topic();
         let mut indexer = self.indexer.lock();
         let i = indexer
@@ -80,7 +80,7 @@ impl QueueSelect for RoundRobinQueueSelector {
             .and_modify(|e| *e = e.wrapping_add(1))
             .or_insert(0);
         let index = *i % mqs.len();
-        mqs[index].clone()
+        mqs.get(index).cloned()
     }
 }
 
@@ -98,12 +98,12 @@ impl HashQueueSelector {
 }
 
 impl QueueSelect for HashQueueSelector {
-    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> MessageQueue {
+    fn select(&self, msg: &Message, mqs: &[MessageQueue]) -> Option<MessageQueue> {
         if let Some(key) = msg.sharding_key() {
             let mut hasher = fnv::FnvHasher::default();
             hasher.write(key.as_bytes());
             let index = hasher.finish() as usize % mqs.len();
-            mqs[index].clone()
+            mqs.get(index).cloned()
         } else {
             self.random.select(msg, mqs)
         }

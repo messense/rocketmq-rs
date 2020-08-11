@@ -8,6 +8,7 @@ use parking_lot::Mutex;
 use crate::client::{Client, ClientOptions};
 use crate::message::{Message, MessageExt, MessageQueue};
 use crate::namesrv::NameServer;
+use crate::producer::selector::QueueSelect;
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
 use crate::Error;
@@ -42,7 +43,7 @@ pub struct ProducerOptions {
     selector: QueueSelector,
     resolver: Resolver,
     send_msg_timeout: Duration,
-    default_topic_queue_nums: usize,
+    default_topic_queue_nums: i32,
     create_topic_key: String,
     compress_msg_body_over_how_much: usize,
     max_message_size: usize,
@@ -86,7 +87,7 @@ impl ProducerOptions {
         self
     }
 
-    pub fn set_default_topic_queue_nums(&mut self, queue_nums: usize) -> &mut Self {
+    pub fn set_default_topic_queue_nums(&mut self, queue_nums: i32) -> &mut Self {
         self.default_topic_queue_nums = queue_nums;
         self
     }
@@ -128,10 +129,6 @@ impl ProducerInner {
         Self {
             publish_info: HashMap::new(),
         }
-    }
-
-    fn select_message_queue(&self, msg: &Message) -> MessageQueue {
-        todo!()
     }
 
     pub(crate) fn publish_topic_list(&self) -> Vec<String> {
@@ -189,5 +186,42 @@ impl Producer {
     pub fn shutdown(&self) {
         self.client.unregister_producer(&self.options.group_name());
         self.client.shutdown();
+    }
+
+    async fn select_message_queue(&self, msg: &Message) -> Result<Option<MessageQueue>, Error> {
+        let topic = msg.topic();
+        let info = self.inner.lock().publish_info.get(topic).cloned();
+        let info = if info.is_some() {
+            info
+        } else {
+            let (route_data, changed) = self
+                .client
+                .name_server
+                .update_topic_route_info(topic)
+                .await?;
+            self.client.update_publish_info(topic, route_data, changed);
+            self.inner.lock().publish_info.get(topic).cloned()
+        };
+        let info = if info.is_some() {
+            info
+        } else {
+            let (route_data, changed) = self
+                .client
+                .name_server
+                .update_topic_route_info_with_default(
+                    topic,
+                    &self.options.create_topic_key,
+                    self.options.default_topic_queue_nums,
+                )
+                .await?;
+            self.client.update_publish_info(topic, route_data, changed);
+            self.inner.lock().publish_info.get(topic).cloned()
+        };
+        if let Some(info) = info {
+            if info.have_topic_router_info && !info.message_queues.is_empty() {
+                return Ok(self.options.selector.select(msg, &info.message_queues));
+            }
+        }
+        Ok(None)
     }
 }
