@@ -32,7 +32,9 @@ pub struct PullResult {
     pub body: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
 pub struct ProducerOptions {
+    client_options: ClientOptions,
     selector: QueueSelector,
     resolver: Resolver,
     send_msg_timeout: Duration,
@@ -43,26 +45,10 @@ pub struct ProducerOptions {
     max_retries: usize,
 }
 
-impl fmt::Debug for ProducerOptions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ProducerOptions")
-            .field("send_msg_timeout", &self.send_msg_timeout)
-            .field("default_queue_nums", &self.default_topic_queue_nums)
-            .field("create_topic_key", &self.create_topic_key)
-            .field("resolver", &self.resolver.description())
-            .field(
-                "compress_msg_body_over_how_much",
-                &self.compress_msg_body_over_how_much,
-            )
-            .field("max_message_size", &self.max_message_size)
-            .field("max_retries", &self.max_retries)
-            .finish()
-    }
-}
-
 impl Default for ProducerOptions {
     fn default() -> ProducerOptions {
         Self {
+            client_options: ClientOptions::default(),
             selector: QueueSelector::default(),
             resolver: Resolver::Http(HttpResolver::new("DEFAULT".to_string())),
             send_msg_timeout: Duration::from_secs(3),
@@ -78,6 +64,13 @@ impl Default for ProducerOptions {
 impl ProducerOptions {
     pub fn new() -> Self {
         ProducerOptions::default()
+    }
+
+    pub fn with_client_options(client_options: ClientOptions) -> Self {
+        Self {
+            client_options,
+            ..Default::default()
+        }
     }
 
     pub fn set_send_msg_timeout(&mut self, timeout: Duration) -> &mut Self {
@@ -117,19 +110,11 @@ impl ProducerOptions {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct ProducerInner {
     group: String,
     options: ProducerOptions,
     client: Client<Resolver>,
-}
-
-impl fmt::Debug for ProducerInner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Producer")
-            .field("group", &self.group)
-            .field("options", &self.options)
-            .finish()
-    }
 }
 
 impl ProducerInner {
@@ -138,9 +123,9 @@ impl ProducerInner {
     }
 
     fn with_options(group: &str, options: ProducerOptions) -> Result<Self, Error> {
-        let client_options = ClientOptions::new(group);
-        // FIXME: credentials
-        let name_server = NameServer::new(options.resolver.clone(), None)?;
+        let client_options = options.client_options.clone();
+        let name_server =
+            NameServer::new(options.resolver.clone(), client_options.credentials.clone())?;
         Ok(Self {
             group: group.to_string(),
             options,
