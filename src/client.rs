@@ -8,7 +8,7 @@ use std::sync::{
 
 use if_addrs::get_if_addrs;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use tokio::sync::oneshot;
+use tokio::sync::broadcast;
 use tokio::time;
 
 use crate::consumer::ConsumerInner;
@@ -113,16 +113,15 @@ enum ClientState {
     Shutdown = 3,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client<R: NsResolver + Clone> {
     options: ClientOptions,
     remote_client: RemotingClient,
     consumers: Arc<Mutex<HashMap<String, Arc<ConsumerInner>>>>,
     producers: Arc<Mutex<HashMap<String, Arc<ProducerInner>>>>,
     name_server: NameServer<R>,
-    state: AtomicU8,
-    shutdown_tx: oneshot::Sender<()>,
-    shutdown_rx: oneshot::Receiver<()>,
+    state: Arc<AtomicU8>,
+    shutdown_tx: Arc<Mutex<Option<broadcast::Sender<()>>>>,
 }
 
 impl<R> Client<R>
@@ -131,16 +130,14 @@ where
 {
     pub fn new(options: ClientOptions, name_server: NameServer<R>) -> Self {
         let credentials = options.credentials.clone();
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
         Self {
             options,
             remote_client: RemotingClient::new(credentials),
             consumers: Arc::new(Mutex::new(HashMap::new())),
             producers: Arc::new(Mutex::new(HashMap::new())),
             name_server,
-            state: AtomicU8::new(ClientState::Created.into()),
-            shutdown_tx,
-            shutdown_rx,
+            state: Arc::new(AtomicU8::new(ClientState::Created.into())),
+            shutdown_tx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -163,14 +160,24 @@ where
             ClientState::Created => {
                 self.state
                     .store(ClientState::StartFailed.into(), Ordering::SeqCst);
+                let (shutdown_tx, mut shutdown_rx) = broadcast::channel(1);
+                let mut shutdown_rx2 = shutdown_tx.subscribe();
+                self.shutdown_tx.lock().unwrap().replace(shutdown_tx);
+
                 // Update name server address
                 let name_server = self.name_server.clone();
                 tokio::spawn(async move {
                     time::delay_for(time::Duration::from_secs(10)).await;
                     let mut interval = time::interval(time::Duration::from_secs(2 * 60));
                     loop {
-                        interval.tick().await;
-                        let _res = name_server.update_name_server_address();
+                        tokio::select! {
+                            _ = interval.tick() => {
+                                let _res = name_server.update_name_server_address();
+                            }
+                            _ = shutdown_rx2.recv() => {
+                                break;
+                            }
+                        }
                     }
                 });
 
