@@ -380,8 +380,13 @@ where
                     HashMap::new(),
                     hb_bytes.clone(),
                 );
-                match self.remote_client.invoke(addr, cmd).await {
-                    Ok(res) => match ResponseCode::try_from(res.code()) {
+                match time::timeout(
+                    time::Duration::from_secs(3),
+                    self.remote_client.invoke(addr, cmd),
+                )
+                .await
+                {
+                    Ok(Ok(res)) => match ResponseCode::try_from(res.code()) {
                         Ok(ResponseCode::Success) => {
                             self.name_server.add_broker_version(
                                 &broker_name,
@@ -400,11 +405,13 @@ where
                                 broker_name = &broker_name[..],
                                 broker_id = id,
                                 broker_addr = &addr[..],
+                                code = res.code(),
                                 "send heart beat to broker failed",
                             );
                         }
                     },
-                    Err(err) => warn!("send heart beat to broker {} error {:?}", id, err),
+                    Ok(Err(err)) => warn!("send heart beat to broker {} error {:?}", id, err),
+                    Err(err) => warn!("send heart beat to broker {} timed out", id),
                 }
             }
         }
