@@ -5,7 +5,7 @@ use std::time::Duration;
 use crate::client::{Client, ClientOptions};
 use crate::message::MessageExt;
 use crate::namesrv::NameServer;
-use crate::resolver::{HttpResolver, NsResolver, PassthroughResolver};
+use crate::resolver::{HttpResolver, NsResolver, PassthroughResolver, Resolver};
 use crate::Error;
 use selector::{QueueSelector, RoundRobinQueueSelector};
 
@@ -32,12 +32,12 @@ pub struct PullResult {
     pub body: Vec<u8>,
 }
 
-pub struct ProducerOptions<R: NsResolver = HttpResolver> {
+pub struct ProducerOptions {
     selector: Box<dyn QueueSelector>,
     send_msg_timeout: Duration,
     default_topic_queue_nums: usize,
     create_topic_key: String,
-    resolver: R,
+    resolver: Resolver,
 }
 
 impl fmt::Debug for ProducerOptions {
@@ -58,7 +58,7 @@ impl Default for ProducerOptions {
             send_msg_timeout: Duration::from_secs(3),
             default_topic_queue_nums: 4,
             create_topic_key: "TBW102".to_string(),
-            resolver: HttpResolver::new("DEFAULT".to_string()),
+            resolver: Resolver::Http(HttpResolver::new("DEFAULT".to_string())),
         }
     }
 }
@@ -83,22 +83,24 @@ impl ProducerOptions {
         self
     }
 
-    pub fn set_name_server_domain(&mut self, url: &str) -> &mut Self {
-        self.resolver = HttpResolver::with_domain("DEFAULT".to_string(), url.to_string());
-        self
-    }
-}
-
-impl<R: NsResolver> ProducerOptions<R> {
-    pub fn set_resolver(&mut self, resolver: R) -> &mut Self {
+    pub fn set_resolver(&mut self, resolver: Resolver) -> &mut Self {
         self.resolver = resolver;
         self
     }
-}
 
-impl ProducerOptions<PassthroughResolver<HttpResolver>> {
     pub fn set_name_server(&mut self, addrs: Vec<String>) -> &mut Self {
-        self.resolver = PassthroughResolver::new(addrs, HttpResolver::new("DEFAULT".to_string()));
+        self.resolver = Resolver::PassthroughHttp(PassthroughResolver::new(
+            addrs,
+            HttpResolver::new("DEFAULT".to_string()),
+        ));
+        self
+    }
+
+    pub fn set_name_server_domain(&mut self, url: &str) -> &mut Self {
+        self.resolver = Resolver::Http(HttpResolver::with_domain(
+            "DEFAULT".to_string(),
+            url.to_string(),
+        ));
         self
     }
 }
@@ -106,7 +108,7 @@ impl ProducerOptions<PassthroughResolver<HttpResolver>> {
 pub(crate) struct ProducerInner {
     group: String,
     options: ProducerOptions,
-    client: Client<HttpResolver>,
+    client: Client<Resolver>,
 }
 
 impl fmt::Debug for ProducerInner {

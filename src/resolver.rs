@@ -9,13 +9,31 @@ pub trait NsResolver {
     fn description(&self) -> &'static str;
 }
 
-impl NsResolver for Box<dyn NsResolver> {
+#[derive(Debug, Clone)]
+pub enum Resolver {
+    Env(EnvResolver),
+    Static(StaticResolver),
+    PassthroughHttp(PassthroughResolver<HttpResolver>),
+    Http(HttpResolver),
+}
+
+impl NsResolver for Resolver {
     fn resolve(&self) -> Result<Vec<String>, Error> {
-        (*self).resolve()
+        match self {
+            Resolver::Env(inner) => inner.resolve(),
+            Resolver::Static(inner) => inner.resolve(),
+            Resolver::PassthroughHttp(inner) => inner.resolve(),
+            Resolver::Http(inner) => inner.resolve(),
+        }
     }
 
     fn description(&self) -> &'static str {
-        (*self).description()
+        match self {
+            Resolver::Env(inner) => inner.description(),
+            Resolver::Static(inner) => inner.description(),
+            Resolver::PassthroughHttp(inner) => inner.description(),
+            Resolver::Http(inner) => inner.description(),
+        }
     }
 }
 
