@@ -118,7 +118,7 @@ impl Producer {
 
     pub fn with_options(group: &str, options: ProducerOptions) -> Result<Self, Error> {
         let client_options = ClientOptions::new(group);
-        let name_server = NameServer::new(dyn_clone::clone_box(&*options.resolver))?;
+        let name_server = NameServer::new(dyn_clone::clone_box(&*options.resolver), None)?;
         Ok(Self {
             group: group.to_string(),
             options,

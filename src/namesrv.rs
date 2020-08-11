@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use rand::prelude::*;
 
+use crate::client::Credentials;
 use crate::message::MessageQueue;
 use crate::protocol::{
     request::GetRouteInfoRequestHeader, RemotingCommand, RequestCode, ResponseCode,
@@ -30,7 +31,7 @@ pub struct NameServer<NR: NsResolver> {
 }
 
 impl<NR: NsResolver> NameServer<NR> {
-    pub fn new(resolver: NR) -> Result<Self, Error> {
+    pub fn new<C: Into<Option<Credentials>>>(resolver: NR, credentials: C) -> Result<Self, Error> {
         let servers = resolver.resolve()?;
         let inner = NameServerInner {
             servers,
@@ -42,7 +43,7 @@ impl<NR: NsResolver> NameServer<NR> {
         Ok(Self {
             inner: Mutex::new(inner),
             resolver,
-            remoting_client: RemotingClient::new(),
+            remoting_client: RemotingClient::new(credentials),
         })
     }
 
@@ -256,15 +257,30 @@ mod test {
 
     #[tokio::test]
     async fn test_query_topic_route_info_with_empty_namesrv() {
-        let namesrv = NameServer::new(StaticResolver::new(vec![])).unwrap();
+        let namesrv = NameServer::new(StaticResolver::new(vec![]), None).unwrap();
         let res = namesrv.query_topic_route_info(TOPIC).await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_query_topic_route_info() {
-        let namesrv =
-            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let namesrv = NameServer::new(
+            StaticResolver::new(vec!["localhost:9876".to_string()]),
+            None,
+        )
+        .unwrap();
+        let res = namesrv.query_topic_route_info(TOPIC).await;
+        println!("{:?}", res);
+        assert!(!res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_query_topic_route_info_with_credentials() {
+        let namesrv = NameServer::new(
+            StaticResolver::new(vec!["localhost:9876".to_string()]),
+            Credentials::new("rocketmq", "12345678"),
+        )
+        .unwrap();
         let res = namesrv.query_topic_route_info(TOPIC).await;
         println!("{:?}", res);
         assert!(!res.is_err());
@@ -272,32 +288,44 @@ mod test {
 
     #[tokio::test]
     async fn test_update_topic_route_info() {
-        let namesrv =
-            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let namesrv = NameServer::new(
+            StaticResolver::new(vec!["localhost:9876".to_string()]),
+            None,
+        )
+        .unwrap();
         assert!(namesrv.update_topic_route_info(TOPIC).await.unwrap());
         assert!(!namesrv.update_topic_route_info(TOPIC).await.unwrap());
     }
 
     #[tokio::test]
     async fn test_fetch_subscribe_message_queues() {
-        let namesrv =
-            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let namesrv = NameServer::new(
+            StaticResolver::new(vec!["localhost:9876".to_string()]),
+            None,
+        )
+        .unwrap();
         let res = namesrv.fetch_subscribe_message_queues(TOPIC).await.unwrap();
         assert!(!res.is_empty());
     }
 
     #[tokio::test]
     async fn test_fetch_publish_message_queues() {
-        let namesrv =
-            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let namesrv = NameServer::new(
+            StaticResolver::new(vec!["localhost:9876".to_string()]),
+            None,
+        )
+        .unwrap();
         let res = namesrv.fetch_publish_message_queues(TOPIC).await.unwrap();
         assert!(!res.is_empty());
     }
 
     #[tokio::test]
     pub async fn find_broker_addr_by_topic() {
-        let namesrv =
-            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let namesrv = NameServer::new(
+            StaticResolver::new(vec!["localhost:9876".to_string()]),
+            None,
+        )
+        .unwrap();
         namesrv.update_topic_route_info(TOPIC).await.unwrap();
         let addr = namesrv.find_broker_addr_by_topic(TOPIC).unwrap();
         assert!(addr.ends_with(":10911"));
@@ -305,8 +333,11 @@ mod test {
 
     #[tokio::test]
     pub async fn find_broker_addr_by_name() {
-        let namesrv =
-            NameServer::new(StaticResolver::new(vec!["localhost:9876".to_string()])).unwrap();
+        let namesrv = NameServer::new(
+            StaticResolver::new(vec!["localhost:9876".to_string()]),
+            None,
+        )
+        .unwrap();
         namesrv.update_topic_route_info(TOPIC).await.unwrap();
         let res = namesrv.query_topic_route_info(TOPIC).await.unwrap();
         let broker_name = res.broker_datas.first().map(|x| &x.broker_name).unwrap();

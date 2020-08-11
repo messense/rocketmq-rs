@@ -2,11 +2,16 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
+use hmac::{Hmac, Mac, NewMac};
+use sha1::{Digest, Sha1};
 use tokio::sync::oneshot;
 
 use super::connection::Connection;
+use crate::client::Credentials;
 use crate::error::{ConnectionError, Error};
 use crate::protocol::RemotingCommand;
+
+type HmacSha1 = Hmac<Sha1>;
 
 enum ConnectionStatus {
     Connected(Arc<Connection>),
@@ -16,31 +21,41 @@ enum ConnectionStatus {
 #[derive(Clone)]
 pub struct RemotingClient {
     connections: Arc<Mutex<HashMap<String, ConnectionStatus>>>,
+    credentials: Option<Credentials>,
 }
 
 impl fmt::Debug for RemotingClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RemotingClient").finish()
+        f.debug_struct("RemotingClient")
+            .field("credentials", &self.credentials)
+            .finish()
+    }
+}
+
+impl Default for RemotingClient {
+    fn default() -> Self {
+        Self::new(None)
     }
 }
 
 impl RemotingClient {
-    pub fn new() -> Self {
+    pub fn new<C: Into<Option<Credentials>>>(credentials: C) -> Self {
         Self {
             connections: Arc::new(Mutex::new(HashMap::new())),
+            credentials: credentials.into(),
         }
     }
 
     pub async fn invoke(&self, addr: &str, cmd: RemotingCommand) -> Result<RemotingCommand, Error> {
         let conn = self.get_connection(addr).await?;
         let sender = conn.sender();
-        Ok(sender.send(cmd).await?)
+        Ok(sender.send(self.add_signature(cmd)).await?)
     }
 
     pub async fn invoke_oneway(&self, addr: &str, cmd: RemotingCommand) -> Result<(), Error> {
         let conn = self.get_connection(addr).await?;
         let sender = conn.sender();
-        Ok(sender.send_oneway(cmd).await?)
+        Ok(sender.send_oneway(self.add_signature(cmd)).await?)
     }
 
     pub async fn get_connection(&self, addr: &str) -> Result<Arc<Connection>, Error> {
@@ -108,5 +123,62 @@ impl RemotingClient {
             None => {}
         }
         Ok(c)
+    }
+
+    fn add_signature(&self, mut cmd: RemotingCommand) -> RemotingCommand {
+        if let Some(credentials) = &self.credentials {
+            let size = cmd.header.ext_fields.len() + 1;
+            let mut m = HashMap::with_capacity(size);
+            m.insert("AccessKey".to_string(), &credentials.access_key);
+            let mut order = Vec::with_capacity(size);
+            order.push("AccessKey");
+            if let Some(security_token) = &credentials.security_token {
+                if !security_token.is_empty() {
+                    m.insert("SecurityToken".to_string(), security_token);
+                    cmd.header
+                        .ext_fields
+                        .insert("SecurityToken".to_string(), security_token.clone());
+                }
+            }
+            for (k, v) in &cmd.header.ext_fields {
+                m.insert(k.clone(), v);
+                order.push(&k[..]);
+            }
+            order.sort();
+            let mut content = Vec::with_capacity(cmd.body.len());
+            for key in order {
+                content.extend_from_slice(&m[key].as_bytes());
+            }
+            content.extend_from_slice(&cmd.body);
+            cmd.header.ext_fields.insert(
+                "Signature".to_string(),
+                Self::calculate_signature(&content, credentials.secret_key.as_bytes()),
+            );
+            cmd.header
+                .ext_fields
+                .insert("AccessKey".to_string(), credentials.access_key.clone());
+        }
+        cmd
+    }
+
+    fn calculate_signature(data: &[u8], key: &[u8]) -> String {
+        let mut mac = HmacSha1::new_varkey(key).unwrap();
+        mac.update(data);
+        let result = mac.finalize().into_bytes();
+        base64::encode(&result)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::RemotingClient;
+
+    #[test]
+    fn test_calculate_signature() {
+        let signature = RemotingClient::calculate_signature(
+            b"Hello RocketMQ Client ACL Feature",
+            b"adiaushdiaushd",
+        );
+        assert_eq!(signature, "tAb/54Rwwcq+pbH8Loi7FWX4QSQ=");
     }
 }

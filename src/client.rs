@@ -40,9 +40,19 @@ pub trait InnerConsumer {
 
 #[derive(Debug, Clone)]
 pub struct Credentials {
-    access_key: String,
-    secret_key: String,
-    security_token: String,
+    pub access_key: String,
+    pub secret_key: String,
+    pub security_token: Option<String>,
+}
+
+impl Credentials {
+    pub fn new<S: Into<String>>(access_key: S, secret_key: S) -> Self {
+        Self {
+            access_key: access_key.into(),
+            secret_key: secret_key.into(),
+            security_token: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -121,9 +131,10 @@ pub struct Client<P: InnerProducer, C: InnerConsumer, R: NsResolver> {
 
 impl<P: InnerProducer, C: InnerConsumer, R: NsResolver> Client<P, C, R> {
     pub fn new(options: ClientOptions, name_server: NameServer<R>) -> Self {
+        let credentials = options.credentials.clone();
         Self {
             options,
-            remote_client: RemotingClient::new(),
+            remote_client: RemotingClient::new(credentials),
             consumers: Arc::new(Mutex::new(HashMap::new())),
             producers: Arc::new(Mutex::new(HashMap::new())),
             name_server,
