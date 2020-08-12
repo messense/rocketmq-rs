@@ -6,10 +6,10 @@ use parking_lot::Mutex;
 
 use crate::client::{Client, ClientOptions, ClientState};
 use crate::error::{ClientError, Error};
-use crate::message::{Message, MessageExt, MessageQueue};
+use crate::message::{Message, MessageExt, MessageFlag, MessageQueue, Property};
 use crate::namesrv::NameServer;
 use crate::producer::selector::QueueSelect;
-use crate::protocol::RemotingCommand;
+use crate::protocol::{request::SendMessageRequestHeader, RemotingCommand, RequestCode};
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
 use selector::QueueSelector;
@@ -235,7 +235,32 @@ impl Producer {
     }
 
     fn build_send_request(&self, mq: &MessageQueue, mut msg: Message) -> RemotingCommand {
-        todo!()
+        msg.set_default_unique_key();
+        let mut sys_flag = 0;
+        if let Some(tran_msg) = msg.get_property(Property::TRANSACTION_PREPARED) {
+            let is_tran_msg: bool = tran_msg.parse().unwrap_or(false);
+            if is_tran_msg {
+                let tran_prepared: i32 = MessageFlag::TransactionPreparedType.into();
+                sys_flag |= tran_prepared;
+            }
+        }
+        let header = SendMessageRequestHeader {
+            producer_group: self.options.group_name().to_string(),
+            topic: mq.topic.clone(),
+            queue_id: mq.queue_id,
+            sys_flag,
+            born_timestamp: 0,
+            flag: msg.flag,
+            properties: "".to_string(), // FIXME serialize message properties
+            reconsume_times: 0,
+            unit_mode: self.options.client_options.unit_mode,
+            max_reconsume_times: 0,
+            batch: msg.batch,
+            default_topic: self.options.create_topic_key.clone(),
+            default_topic_queue_nums: self.options.default_topic_queue_nums,
+        };
+        // FIXME: handle batch message, compress message body
+        RemotingCommand::with_header(RequestCode::SendMessage, header, msg.body)
     }
 
     fn process_send_response(

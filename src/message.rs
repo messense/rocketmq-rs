@@ -4,6 +4,7 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::read::ZlibDecoder;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 pub struct Property;
 
@@ -36,6 +37,17 @@ impl Property {
     pub const SHARDING_KEY: &'static str = "SHARDING_KEY";
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(i32)]
+pub enum MessageFlag {
+    Compressed = 0x1,
+    MultiTags = 0x1 << 1,
+    TransactionNotType = 0,
+    TransactionPreparedType = 0x1 << 2,
+    TransactionCommitType = 0x2 << 2,
+    TransactionRollbackType = 0x3 << 2,
+}
+
 #[derive(Debug, Clone)]
 pub struct MessageQueue {
     pub topic: String,
@@ -46,11 +58,11 @@ pub struct MessageQueue {
 #[derive(Debug, Clone)]
 pub struct Message {
     pub(crate) topic: String,
-    flag: i32,
+    pub(crate) flag: i32,
     properties: HashMap<String, String>,
-    body: Vec<u8>,
+    pub(crate) body: Vec<u8>,
     transaction_id: String,
-    batch: bool,
+    pub(crate) batch: bool,
     pub(crate) queue: Option<MessageQueue>,
 }
 
@@ -91,6 +103,23 @@ impl Message {
             .get(Property::UNIQ_CLIENT_MSG_ID_KEY)
             .cloned()
             .and_then(|val| if val.is_empty() { None } else { Some(val) })
+    }
+
+    pub fn set_unique_key(&mut self, unique_key: String) {
+        self.properties
+            .insert(Property::UNIQ_CLIENT_MSG_ID_KEY.to_string(), unique_key);
+    }
+
+    pub fn set_default_unique_key(&mut self) {
+        // FIXME: implement this
+    }
+
+    pub fn get_property(&self, property: &str) -> Option<&String> {
+        self.properties.get(property)
+    }
+
+    pub fn set_property(&mut self, property: String, value: String) -> Option<String> {
+        self.properties.insert(property, value)
     }
 
     pub fn sharding_key(&self) -> Option<String> {

@@ -47,16 +47,14 @@ impl Credentials {
 pub struct ClientOptions {
     pub(crate) group_name: String,
     name_server_addrs: Vec<String>,
-    // namesrv
     client_ip: String,
     instance_name: String,
-    unit_mode: bool,
+    pub(crate) unit_mode: bool,
     unit_name: String,
     vip_channel_enabled: bool,
     retry_times: usize,
     pub(crate) credentials: Option<Credentials>,
     pub(crate) namespace: String,
-    // resolver
 }
 
 impl ClientOptions {

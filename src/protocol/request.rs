@@ -35,7 +35,7 @@ pub trait EncodeRequestHeader {
 pub struct SendMessageRequestHeader {
     pub producer_group: String,
     pub topic: String,
-    pub queue_id: i32,
+    pub queue_id: u32,
     pub sys_flag: i32,
     pub born_timestamp: i64,
     pub flag: i32,
@@ -45,7 +45,7 @@ pub struct SendMessageRequestHeader {
     pub max_reconsume_times: i32,
     pub batch: bool,
     pub default_topic: String,
-    pub default_topic_queue_nums: String,
+    pub default_topic_queue_nums: i32,
 }
 
 impl EncodeRequestHeader for SendMessageRequestHeader {
