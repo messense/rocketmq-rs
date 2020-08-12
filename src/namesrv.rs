@@ -33,8 +33,11 @@ pub struct NameServer<NR: NsResolver + Clone> {
 }
 
 impl<NR: NsResolver + Clone> NameServer<NR> {
-    pub fn new<C: Into<Option<Credentials>>>(resolver: NR, credentials: C) -> Result<Self, Error> {
-        let servers = resolver.resolve()?;
+    pub async fn new<C: Into<Option<Credentials>>>(
+        resolver: NR,
+        credentials: C,
+    ) -> Result<Self, Error> {
+        let servers = resolver.resolve().await?;
         let inner = NameServerInner {
             servers,
             index: 0,
@@ -71,10 +74,9 @@ impl<NR: NsResolver + Clone> NameServer<NR> {
         self.inner.lock().servers.is_empty()
     }
 
-    pub fn update_name_server_address(&self) -> Result<(), Error> {
-        let mut inner = self.inner.lock();
-        if let Ok(servers) = self.resolver.resolve() {
-            inner.servers = servers;
+    pub async fn update_name_server_address(&self) -> Result<(), Error> {
+        if let Ok(servers) = self.resolver.resolve().await {
+            self.inner.lock().servers = servers;
         }
         Ok(())
     }
@@ -277,7 +279,9 @@ mod test {
 
     #[tokio::test]
     async fn test_query_topic_route_info_with_empty_namesrv() {
-        let namesrv = NameServer::new(StaticResolver::new(vec![]), None).unwrap();
+        let namesrv = NameServer::new(StaticResolver::new(vec![]), None)
+            .await
+            .unwrap();
         let res = namesrv.query_topic_route_info(TOPIC).await;
         assert!(res.is_err());
     }
@@ -288,6 +292,7 @@ mod test {
             StaticResolver::new(vec!["localhost:9876".to_string()]),
             None,
         )
+        .await
         .unwrap();
         let res = namesrv.query_topic_route_info(TOPIC).await;
         println!("{:?}", res);
@@ -300,6 +305,7 @@ mod test {
             StaticResolver::new(vec!["localhost:9876".to_string()]),
             Credentials::new("rocketmq", "12345678"),
         )
+        .await
         .unwrap();
         let res = namesrv.query_topic_route_info(TOPIC).await;
         println!("{:?}", res);
@@ -312,6 +318,7 @@ mod test {
             StaticResolver::new(vec!["localhost:9876".to_string()]),
             None,
         )
+        .await
         .unwrap();
         assert!(namesrv.update_topic_route_info(TOPIC).await.unwrap().1);
         assert!(!namesrv.update_topic_route_info(TOPIC).await.unwrap().1);
@@ -323,6 +330,7 @@ mod test {
             StaticResolver::new(vec!["localhost:9876".to_string()]),
             None,
         )
+        .await
         .unwrap();
         let res = namesrv.fetch_subscribe_message_queues(TOPIC).await.unwrap();
         assert!(!res.is_empty());
@@ -334,6 +342,7 @@ mod test {
             StaticResolver::new(vec!["localhost:9876".to_string()]),
             None,
         )
+        .await
         .unwrap();
         let res = namesrv.fetch_publish_message_queues(TOPIC).await.unwrap();
         assert!(!res.is_empty());
@@ -345,6 +354,7 @@ mod test {
             StaticResolver::new(vec!["localhost:9876".to_string()]),
             None,
         )
+        .await
         .unwrap();
         namesrv.update_topic_route_info(TOPIC).await.unwrap();
         let addr = namesrv.find_broker_addr_by_topic(TOPIC).unwrap();
@@ -357,6 +367,7 @@ mod test {
             StaticResolver::new(vec!["localhost:9876".to_string()]),
             None,
         )
+        .await
         .unwrap();
         namesrv.update_topic_route_info(TOPIC).await.unwrap();
         let res = namesrv.query_topic_route_info(TOPIC).await.unwrap();

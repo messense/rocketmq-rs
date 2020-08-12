@@ -16,7 +16,6 @@ use tracing::{debug, error, info, warn};
 use crate::consumer::ConsumerInner;
 use crate::namesrv::NameServer;
 use crate::producer::{ProducerInner, PullResult, PullStatus};
-use crate::protocol::request::RequestCode::ResetConsumerOffset;
 use crate::protocol::{
     request::PullMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
 };
@@ -111,7 +110,7 @@ fn client_ipv4() -> String {
 
 #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
-enum ClientState {
+pub enum ClientState {
     Created = 0,
     StartFailed = 1,
     Running = 2,
@@ -178,7 +177,7 @@ where
                     loop {
                         tokio::select! {
                             _ = interval.tick() => {
-                                match name_server.update_name_server_address() {
+                                match name_server.update_name_server_address().await {
                                     Ok(_) => info!("name server addresses update succeed"),
                                     Err(err) => error!("name server address update failed: {:?}", err),
                                 };
@@ -249,6 +248,11 @@ where
                 self.remote_client.shutdown();
             }
         }
+    }
+
+    pub fn state(&self) -> ClientState {
+        ClientState::try_from(self.state.load(Ordering::Relaxed))
+            .unwrap_or(ClientState::StartFailed)
     }
 
     #[inline]
@@ -411,7 +415,7 @@ where
                         }
                     },
                     Ok(Err(err)) => warn!("send heart beat to broker {} error {:?}", id, err),
-                    Err(err) => warn!("send heart beat to broker {} timed out", id),
+                    Err(_) => warn!("send heart beat to broker {} timed out", id),
                 }
             }
         }

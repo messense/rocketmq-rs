@@ -1,11 +1,14 @@
 use std::env;
 
+use async_trait::async_trait;
+
 use crate::Error;
 
 const DEFAULT_NAMESRV_ADDR: &'static str = "http://jmenv.tbsite.net:8080/rocketmq/nsaddr";
 
+#[async_trait]
 pub trait NsResolver {
-    fn resolve(&self) -> Result<Vec<String>, Error>;
+    async fn resolve(&self) -> Result<Vec<String>, Error>;
     fn description(&self) -> &'static str;
 }
 
@@ -17,14 +20,15 @@ pub enum Resolver {
     Http(HttpResolver),
 }
 
+#[async_trait]
 impl NsResolver for Resolver {
-    fn resolve(&self) -> Result<Vec<String>, Error> {
-        match self {
-            Resolver::Env(inner) => inner.resolve(),
-            Resolver::Static(inner) => inner.resolve(),
-            Resolver::PassthroughHttp(inner) => inner.resolve(),
-            Resolver::Http(inner) => inner.resolve(),
-        }
+    async fn resolve(&self) -> Result<Vec<String>, Error> {
+        Ok(match self {
+            Resolver::Env(inner) => inner.resolve().await?,
+            Resolver::Static(inner) => inner.resolve().await?,
+            Resolver::PassthroughHttp(inner) => inner.resolve().await?,
+            Resolver::Http(inner) => inner.resolve().await?,
+        })
     }
 
     fn description(&self) -> &'static str {
@@ -40,8 +44,9 @@ impl NsResolver for Resolver {
 #[derive(Debug, Clone, Copy)]
 pub struct EnvResolver;
 
+#[async_trait]
 impl NsResolver for EnvResolver {
-    fn resolve(&self) -> Result<Vec<String>, Error> {
+    async fn resolve(&self) -> Result<Vec<String>, Error> {
         Ok(env::var("NAMESRV_ADDR")
             .map(|s| s.split(';').map(str::to_string).collect())
             .unwrap_or_default())
@@ -63,8 +68,9 @@ impl StaticResolver {
     }
 }
 
+#[async_trait]
 impl NsResolver for StaticResolver {
-    fn resolve(&self) -> Result<Vec<String>, Error> {
+    async fn resolve(&self) -> Result<Vec<String>, Error> {
         Ok(self.addrs.clone())
     }
 
@@ -85,10 +91,11 @@ impl<T: NsResolver> PassthroughResolver<T> {
     }
 }
 
-impl<T: NsResolver + Clone> NsResolver for PassthroughResolver<T> {
-    fn resolve(&self) -> Result<Vec<String>, Error> {
+#[async_trait]
+impl<T: NsResolver + Clone + Send + Sync> NsResolver for PassthroughResolver<T> {
+    async fn resolve(&self) -> Result<Vec<String>, Error> {
         if self.addrs.is_empty() {
-            self.fallback.resolve()
+            Ok(self.fallback.resolve().await?)
         } else {
             Ok(self.addrs.clone())
         }
@@ -103,7 +110,7 @@ impl<T: NsResolver + Clone> NsResolver for PassthroughResolver<T> {
 pub struct HttpResolver {
     domain: String,
     instance: String,
-    http: reqwest::blocking::Client,
+    http: reqwest::Client,
     fallback: EnvResolver,
 }
 
@@ -112,7 +119,7 @@ impl HttpResolver {
         Self {
             domain: DEFAULT_NAMESRV_ADDR.to_string(),
             instance,
-            http: reqwest::blocking::Client::new(),
+            http: reqwest::Client::new(),
             fallback: EnvResolver,
         }
     }
@@ -121,15 +128,15 @@ impl HttpResolver {
         Self {
             domain,
             instance,
-            http: reqwest::blocking::Client::new(),
+            http: reqwest::Client::new(),
             fallback: EnvResolver,
         }
     }
 
-    pub fn get(&self) -> Result<Vec<String>, Error> {
-        let resp = self.http.get(&self.domain).send();
+    async fn get(&self) -> Result<Vec<String>, Error> {
+        let resp = self.http.get(&self.domain).send().await;
         if let Ok(res) = resp {
-            if let Ok(body) = res.text() {
+            if let Ok(body) = res.text().await {
                 // TODO: save snapshot to file
                 return Ok(body.split(';').map(str::to_string).collect());
             }
@@ -138,12 +145,13 @@ impl HttpResolver {
     }
 }
 
+#[async_trait]
 impl NsResolver for HttpResolver {
-    fn resolve(&self) -> Result<Vec<String>, Error> {
-        if let Ok(addrs) = self.get() {
+    async fn resolve(&self) -> Result<Vec<String>, Error> {
+        if let Ok(addrs) = self.get().await {
             Ok(addrs)
         } else {
-            self.fallback.resolve()
+            Ok(self.fallback.resolve().await?)
         }
     }
 

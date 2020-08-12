@@ -1,18 +1,17 @@
 use std::collections::HashMap;
-use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
 
-use crate::client::{Client, ClientOptions};
+use crate::client::{Client, ClientOptions, ClientState};
+use crate::error::{ClientError, Error};
 use crate::message::{Message, MessageExt, MessageQueue};
 use crate::namesrv::NameServer;
 use crate::producer::selector::QueueSelect;
 use crate::protocol::RemotingCommand;
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
-use crate::Error;
 use selector::QueueSelector;
 
 pub mod selector;
@@ -185,14 +184,14 @@ pub struct Producer {
 }
 
 impl Producer {
-    pub fn new() -> Result<Self, Error> {
-        Self::with_options(ProducerOptions::default())
+    pub async fn new() -> Result<Self, Error> {
+        Ok(Self::with_options(ProducerOptions::default()).await?)
     }
 
-    pub fn with_options(options: ProducerOptions) -> Result<Self, Error> {
+    pub async fn with_options(options: ProducerOptions) -> Result<Self, Error> {
         let client_options = options.client_options.clone();
         let name_server =
-            NameServer::new(options.resolver.clone(), client_options.credentials.clone())?;
+            NameServer::new(options.resolver.clone(), client_options.credentials.clone()).await?;
         Ok(Self {
             inner: Arc::new(Mutex::new(ProducerInner::new())),
             options,
@@ -212,6 +211,12 @@ impl Producer {
     }
 
     pub async fn send(&self, msg: Message) -> Result<SendResult, Error> {
+        match self.client.state() {
+            ClientState::Created => return Err(Error::Client(ClientError::NotStarted)),
+            ClientState::StartFailed => return Err(Error::Client(ClientError::StartFailed)),
+            ClientState::Shutdown => return Err(Error::Client(ClientError::Shutdown)),
+            _ => {}
+        }
         let mut msg = msg;
         let namespace = &self.options.client_options.namespace;
         if !namespace.is_empty() {
@@ -276,5 +281,27 @@ impl Producer {
             }
         }
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Producer;
+    use crate::error::{ClientError, Error};
+    use crate::message::Message;
+
+    #[tokio::test]
+    async fn test_producer_send_error_not_started() {
+        let producer = Producer::new().await.unwrap();
+        let msg = Message::new(
+            "test".to_string(),
+            String::new(),
+            String::new(),
+            0,
+            b"test".to_vec(),
+            true,
+        );
+        let ret = producer.send(msg).await;
+        matches!(ret.unwrap_err(), Error::Client(ClientError::NotStarted));
     }
 }
