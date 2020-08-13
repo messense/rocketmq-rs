@@ -7,7 +7,6 @@ use std::sync::{
     Arc,
 };
 
-use if_addrs::get_if_addrs;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use parking_lot::Mutex;
 use tokio::sync::broadcast;
@@ -23,6 +22,7 @@ use crate::protocol::{
 use crate::remoting::RemotingClient;
 use crate::resolver::NsResolver;
 use crate::route::TopicRouteData;
+use crate::utils::client_ip_addr;
 use crate::Error;
 
 mod model;
@@ -99,30 +99,6 @@ fn client_ip() -> String {
             IpAddr::V6(v6) => format!("[{}]", v6),
         })
         .unwrap_or_else(|| "127.0.0.1".to_string())
-}
-
-fn client_ip_addr() -> Option<IpAddr> {
-    let mut ipv6_addrs = Vec::new();
-    if let Ok(addrs) = get_if_addrs() {
-        for addr in addrs {
-            if addr.is_loopback() {
-                continue;
-            }
-            let ip = addr.ip();
-            if ip.is_ipv4() {
-                let ip_str = ip.to_string();
-                if ip_str.starts_with("127.0") || ip_str.starts_with("192.") {
-                    continue;
-                } else {
-                    return Some(ip);
-                }
-            } else {
-                ipv6_addrs.push(ip);
-            }
-        }
-    }
-    // did not find ipv4 address, try ipv6
-    ipv6_addrs.first().cloned()
 }
 
 #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
@@ -471,16 +447,5 @@ where
                 Err(err) => error!("update topic {} route info failed: {:?}", topic, err),
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::client_ip_addr;
-
-    #[test]
-    fn test_client_ip_addr() {
-        let ip = client_ip_addr();
-        assert!(ip.is_some());
     }
 }

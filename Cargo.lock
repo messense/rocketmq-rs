@@ -869,6 +869,7 @@ dependencies = [
  "hmac",
  "if-addrs",
  "num_enum",
+ "once_cell",
  "parking_lot",
  "rand",
  "reqwest",

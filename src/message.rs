@@ -1,13 +1,29 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
+
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::read::ZlibDecoder;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::utils::client_ip_addr;
+
 const NAME_VALUE_SEP: char = '\u{001}';
 const PROPERTY_SEP: char = '\u{002}';
+
+static UNIQ_ID_GENERATOR: Lazy<Mutex<UniqueIdGenerator>> = Lazy::new(|| {
+    let local_ip = client_ip_addr().unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
+    let mut ip_bytes = Vec::new();
+    match local_ip {
+        IpAddr::V4(v4) => ip_bytes.extend_from_slice(&v4.octets()),
+        IpAddr::V6(v6) => ip_bytes.extend_from_slice(&v6.octets()),
+    };
+    let generator = UniqueIdGenerator { ip: ip_bytes };
+    Mutex::new(generator)
+});
 
 pub struct Property;
 
@@ -305,6 +321,16 @@ impl MessageExt {
         wtr.write_i32::<BigEndian>(port).unwrap();
         wtr.write_i64::<BigEndian>(commit_offset).unwrap();
         hex::encode(wtr)
+    }
+}
+
+struct UniqueIdGenerator {
+    ip: Vec<u8>,
+}
+
+impl UniqueIdGenerator {
+    fn generate(&mut self) -> String {
+        todo!()
     }
 }
 

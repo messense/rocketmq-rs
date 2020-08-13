@@ -11,6 +11,7 @@ mod remoting;
 /// RocketMQ name server resolver
 pub mod resolver;
 mod route;
+mod utils;
 
 pub use error::Error;
 pub use producer::{Producer, ProducerOptions};
