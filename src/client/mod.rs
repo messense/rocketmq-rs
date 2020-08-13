@@ -170,7 +170,6 @@ where
                 // Schedule update name server address
                 let name_server = self.name_server.clone();
                 tokio::spawn(async move {
-                    time::delay_for(time::Duration::from_secs(10)).await;
                     let mut interval = time::interval(time::Duration::from_secs(2 * 60));
                     loop {
                         tokio::select! {

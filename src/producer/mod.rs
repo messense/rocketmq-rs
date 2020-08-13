@@ -184,14 +184,14 @@ pub struct Producer {
 }
 
 impl Producer {
-    pub async fn new() -> Result<Self, Error> {
-        Ok(Self::with_options(ProducerOptions::default()).await?)
+    pub fn new() -> Result<Self, Error> {
+        Self::with_options(ProducerOptions::default())
     }
 
-    pub async fn with_options(options: ProducerOptions) -> Result<Self, Error> {
+    pub fn with_options(options: ProducerOptions) -> Result<Self, Error> {
         let client_options = options.client_options.clone();
         let name_server =
-            NameServer::new(options.resolver.clone(), client_options.credentials.clone()).await?;
+            NameServer::new(options.resolver.clone(), client_options.credentials.clone())?;
         Ok(Self {
             inner: Arc::new(Mutex::new(ProducerInner::new())),
             options,
@@ -317,7 +317,7 @@ mod test {
 
     #[tokio::test]
     async fn test_producer_send_error_not_started() {
-        let producer = Producer::new().await.unwrap();
+        let producer = Producer::new().unwrap();
         let msg = Message::new(
             "test".to_string(),
             String::new(),
