@@ -1,12 +1,15 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use parking_lot::Mutex;
 
 use crate::client::{Client, ClientOptions, ClientState};
 use crate::error::{ClientError, Error};
-use crate::message::{Message, MessageExt, MessageFlag, MessageQueue, Property};
+use crate::message::{Message, MessageExt, MessageQueue, MessageSysFlag, Property};
 use crate::namesrv::NameServer;
 use crate::producer::selector::QueueSelect;
 use crate::protocol::{request::SendMessageRequestHeader, RemotingCommand, RequestCode};
@@ -68,6 +71,7 @@ pub struct ProducerOptions {
     default_topic_queue_nums: i32,
     create_topic_key: String,
     compress_msg_body_over_how_much: usize,
+    compress_level: u32,
     max_message_size: usize,
     max_retries: usize,
 }
@@ -82,7 +86,8 @@ impl Default for ProducerOptions {
             default_topic_queue_nums: 4,
             create_topic_key: "TBW102".to_string(),
             compress_msg_body_over_how_much: 4 * 1024, // 4K
-            max_message_size: 4 * 1024 * 1024,         // 4M
+            compress_level: 5,
+            max_message_size: 4 * 1024 * 1024, // 4M
             max_retries: 2,
         }
     }
@@ -229,18 +234,22 @@ impl Producer {
             .name_server
             .find_broker_addr_by_name(&mq.broker_name)
             .unwrap();
-        let cmd = self.build_send_request(&mq, msg.clone());
+        let cmd = self.build_send_request(&mq, msg.clone())?;
         let res = self.client.invoke(&addr, cmd).await?;
         Self::process_send_response(&mq.broker_name, res, &[msg])
     }
 
-    fn build_send_request(&self, mq: &MessageQueue, mut msg: Message) -> RemotingCommand {
+    fn build_send_request(
+        &self,
+        mq: &MessageQueue,
+        mut msg: Message,
+    ) -> Result<RemotingCommand, Error> {
         msg.set_default_unique_key();
         let mut sys_flag = 0;
         if let Some(tran_msg) = msg.get_property(Property::TRANSACTION_PREPARED) {
             let is_tran_msg: bool = tran_msg.parse().unwrap_or(false);
             if is_tran_msg {
-                let tran_prepared: i32 = MessageFlag::TransactionPreparedType.into();
+                let tran_prepared: i32 = MessageSysFlag::TransactionPreparedType.into();
                 sys_flag |= tran_prepared;
             }
         }
@@ -259,8 +268,29 @@ impl Producer {
             default_topic: self.options.create_topic_key.clone(),
             default_topic_queue_nums: self.options.default_topic_queue_nums,
         };
+        let body = if !msg.batch {
+            let compressed_flag: i32 = MessageSysFlag::Compressed.into();
+            if msg.sys_flag & compressed_flag == compressed_flag {
+                // Already compressed
+                msg.body
+            } else {
+                if msg.body.len() >= self.options.compress_msg_body_over_how_much {
+                    let mut encoder =
+                        ZlibEncoder::new(Vec::new(), Compression::new(self.options.compress_level));
+                    encoder.write_all(&msg.body)?;
+                    let compressed = encoder.finish()?;
+                    msg.sys_flag |= compressed_flag;
+                    compressed
+                } else {
+                    msg.body
+                }
+            }
+        } else {
+            msg.body
+        };
         // FIXME: handle batch message, compress message body
-        RemotingCommand::with_header(RequestCode::SendMessage, header, msg.body)
+        let cmd = RemotingCommand::with_header(RequestCode::SendMessage, header, body);
+        Ok(cmd)
     }
 
     fn process_send_response(

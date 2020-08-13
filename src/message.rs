@@ -39,7 +39,7 @@ impl Property {
 
 #[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
 #[repr(i32)]
-pub enum MessageFlag {
+pub enum MessageSysFlag {
     Compressed = 0x1,
     MultiTags = 0x1 << 1,
     TransactionNotType = 0,
@@ -59,6 +59,7 @@ pub struct MessageQueue {
 pub struct Message {
     pub(crate) topic: String,
     pub(crate) flag: i32,
+    pub(crate) sys_flag: i32,
     properties: HashMap<String, String>,
     pub(crate) body: Vec<u8>,
     transaction_id: String,
@@ -90,6 +91,7 @@ impl Message {
         Message {
             topic,
             flag,
+            sys_flag: 0,
             body,
             properties: props,
             transaction_id: String::new(),
@@ -240,6 +242,7 @@ impl MessageExt {
             let msg = Message {
                 topic,
                 flag,
+                sys_flag: 0,
                 properties,
                 body,
                 transaction_id: String::new(),
