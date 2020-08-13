@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
@@ -6,13 +7,16 @@ use std::time::Duration;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use parking_lot::Mutex;
+use time::OffsetDateTime;
 
 use crate::client::{Client, ClientOptions, ClientState};
 use crate::error::{ClientError, Error};
 use crate::message::{Message, MessageExt, MessageQueue, MessageSysFlag, Property};
 use crate::namesrv::NameServer;
 use crate::producer::selector::QueueSelect;
-use crate::protocol::{request::SendMessageRequestHeader, RemotingCommand, RequestCode};
+use crate::protocol::{
+    request::SendMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
+};
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
 use selector::QueueSelector;
@@ -234,7 +238,7 @@ impl Producer {
             .name_server
             .find_broker_addr_by_name(&mq.broker_name)
             .unwrap();
-        let cmd = self.build_send_request(&mq, msg.clone())?;
+        let cmd = self.build_send_request(&mq, &mut msg)?;
         let res = self.client.invoke(&addr, cmd).await?;
         Self::process_send_response(&mq.broker_name, res, &[msg])
     }
@@ -242,7 +246,7 @@ impl Producer {
     fn build_send_request(
         &self,
         mq: &MessageQueue,
-        mut msg: Message,
+        msg: &mut Message,
     ) -> Result<RemotingCommand, Error> {
         msg.set_default_unique_key();
         let mut sys_flag = 0;
@@ -258,7 +262,8 @@ impl Producer {
             topic: mq.topic.clone(),
             queue_id: mq.queue_id,
             sys_flag,
-            born_timestamp: 0,
+            born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::unix_epoch())
+                .whole_milliseconds() as i64,
             flag: msg.flag,
             properties: msg.dump_properties(),
             reconsume_times: 0,
@@ -272,7 +277,7 @@ impl Producer {
             let compressed_flag: i32 = MessageSysFlag::Compressed.into();
             if msg.sys_flag & compressed_flag == compressed_flag {
                 // Already compressed
-                msg.body
+                msg.body.clone()
             } else {
                 if msg.body.len() >= self.options.compress_msg_body_over_how_much {
                     let mut encoder =
@@ -282,13 +287,13 @@ impl Producer {
                     msg.sys_flag |= compressed_flag;
                     compressed
                 } else {
-                    msg.body
+                    msg.body.clone()
                 }
             }
         } else {
-            msg.body
+            msg.body.clone()
         };
-        // FIXME: handle batch message, compress message body
+        // FIXME: handle batch message
         let cmd = RemotingCommand::with_header(RequestCode::SendMessage, header, body);
         Ok(cmd)
     }
@@ -298,7 +303,52 @@ impl Producer {
         cmd: RemotingCommand,
         msgs: &[Message],
     ) -> Result<SendResult, Error> {
-        todo!()
+        let status = match ResponseCode::try_from(cmd.code()).unwrap_or(ResponseCode::Error) {
+            ResponseCode::FlushDiskTimeout => SendStatus::FlushDiskTimeout,
+            ResponseCode::FlushSlaveTimeout => SendStatus::FlushDiskTimeout,
+            ResponseCode::SlaveNotAvailable => SendStatus::SlaveNotAvailable,
+            ResponseCode::Success => SendStatus::Ok,
+            _ => {
+                return Err(Error::ResponseError {
+                    code: cmd.code(),
+                    message: cmd.header.remark,
+                })
+            }
+        };
+        let uniq_msg_id = msgs
+            .iter()
+            .filter_map(|msg| msg.unique_key())
+            .collect::<Vec<&str>>()
+            .join(",");
+        let region_id = cmd
+            .header
+            .ext_fields
+            .get(Property::MSG_REGION)
+            .cloned()
+            .unwrap_or_else(|| "DefaultRegion".to_string());
+        let trace_on = cmd
+            .header
+            .ext_fields
+            .get(Property::TRACE_SWITCH)
+            .map(|prop| !prop.is_empty() && prop != "false")
+            .unwrap_or(false);
+        let queue_id: u32 = cmd.header.ext_fields["queueId"].parse().unwrap();
+        let queue_offset: i64 = cmd.header.ext_fields["queueOffset"].parse().unwrap();
+        let result = SendResult {
+            status,
+            msg_id: uniq_msg_id,
+            message_queue: MessageQueue {
+                topic: msgs[0].topic.clone(),
+                broker_name: broker_name.to_string(),
+                queue_id,
+            },
+            queue_offset,
+            transaction_id: cmd.header.ext_fields.get("transactionId").cloned(),
+            offset_msg_id: cmd.header.ext_fields["msgId"].clone(),
+            region_id,
+            trace_on,
+        };
+        Ok(result)
     }
 
     async fn select_message_queue(&self, msg: &Message) -> Result<Option<MessageQueue>, Error> {
@@ -339,9 +389,15 @@ impl Producer {
     }
 }
 
+impl Drop for Producer {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::Producer;
+    use super::{Producer, ProducerOptions, SendStatus};
     use crate::error::{ClientError, Error};
     use crate::message::{Message, MessageQueue};
 
@@ -349,7 +405,7 @@ mod test {
     async fn test_producer_send_error_not_started() {
         let producer = Producer::new().unwrap();
         let msg = Message::new(
-            "test".to_string(),
+            "SELF_TEST_TOPIC".to_string(),
             String::new(),
             String::new(),
             0,
@@ -360,11 +416,30 @@ mod test {
         matches!(ret.unwrap_err(), Error::Client(ClientError::NotStarted));
     }
 
+    #[tokio::test]
+    async fn test_producer_send_message() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let msg = Message::new(
+            "SELF_TEST_TOPIC".to_string(),
+            String::new(),
+            String::new(),
+            0,
+            b"test".to_vec(),
+            false,
+        );
+        let ret = producer.send(msg).await.unwrap();
+        assert_eq!(ret.status, SendStatus::Ok);
+    }
+
     #[test]
     fn test_producer_build_send_request_no_compression() {
         let producer = Producer::new().unwrap();
         let body = b"test".to_vec();
-        let msg = Message::new(
+        let mut msg = Message::new(
             "test".to_string(),
             String::new(),
             String::new(),
@@ -377,7 +452,7 @@ mod test {
             broker_name: "DefaultCluster".to_string(),
             queue_id: 0,
         };
-        let cmd = producer.build_send_request(&mq, msg).unwrap();
+        let cmd = producer.build_send_request(&mq, &mut msg).unwrap();
         assert_eq!(body, cmd.body);
     }
 
@@ -385,7 +460,7 @@ mod test {
     fn test_producer_build_send_request_compressed() {
         let producer = Producer::new().unwrap();
         let body = b"test".to_vec().repeat(1024);
-        let msg = Message::new(
+        let mut msg = Message::new(
             "test".to_string(),
             String::new(),
             String::new(),
@@ -398,7 +473,7 @@ mod test {
             broker_name: "DefaultCluster".to_string(),
             queue_id: 0,
         };
-        let cmd = producer.build_send_request(&mq, msg).unwrap();
+        let cmd = producer.build_send_request(&mq, &mut msg).unwrap();
         assert_ne!(body, cmd.body);
     }
 }

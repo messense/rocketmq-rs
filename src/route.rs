@@ -60,6 +60,15 @@ pub struct TopicRouteData {
 }
 
 impl TopicRouteData {
+    pub fn new() -> Self {
+        Self {
+            order_topic_conf: String::new(),
+            queue_datas: Vec::new(),
+            broker_datas: Vec::new(),
+            filter_server_table: HashMap::new(),
+        }
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let s = std::str::from_utf8(bytes).unwrap();
         // fixup fastjson mess
@@ -138,12 +147,15 @@ pub struct TopicPublishInfo {
 }
 
 impl TopicPublishInfo {
-    pub fn get_queue_id_by_broker(&self, broker_name: &str) -> Option<i32> {
-        self.route_data
-            .queue_datas
-            .iter()
-            .find(|&queue| queue.broker_name == broker_name)
-            .map(|x| x.write_queue_nums)
+    pub fn new() -> Self {
+        let route_data = TopicRouteData::new();
+        Self {
+            order_topic: false,
+            have_topic_router_info: false,
+            message_queues: Vec::new(),
+            route_data,
+            queue_index: 0,
+        }
     }
 
     pub fn len(&self) -> usize {

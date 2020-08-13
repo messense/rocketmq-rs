@@ -38,7 +38,7 @@ impl RemotingCommand {
             header: Header {
                 code,
                 language: LanguageCode::OTHER,
-                version: 431,
+                version: 317,
                 opaque: 0,
                 flag,
                 remark,

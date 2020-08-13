@@ -61,7 +61,7 @@ impl EncodeRequestHeader for SendMessageRequestHeader {
             "reconsumeTimes".to_string(),
             self.reconsume_times.to_string(),
         );
-        map.insert("unitMode".to_string(), self.flag.to_string());
+        map.insert("unitMode".to_string(), self.unit_mode.to_string());
         map.insert(
             "maxReconsumeTimes".to_string(),
             self.max_reconsume_times.to_string(),

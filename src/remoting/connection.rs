@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI32, Ordering};
 
@@ -8,36 +9,55 @@ use futures::{
 };
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::error::{ConnectionError, Error};
 use crate::protocol::{MqCodec, RemotingCommand};
 
 pub struct ConnectionSender {
+    addr: String,
     tx: mpsc::UnboundedSender<RemotingCommand>,
     registrations_tx: mpsc::UnboundedSender<(i32, oneshot::Sender<RemotingCommand>)>,
     receiver_shutdown: Option<oneshot::Sender<()>>,
     opaque_id: AtomicI32,
 }
 
+impl fmt::Debug for ConnectionSender {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConnectionSender")
+            .field("addr", &self.addr)
+            .finish()
+    }
+}
+
 impl ConnectionSender {
     pub fn new(
+        addr: String,
         tx: mpsc::UnboundedSender<RemotingCommand>,
         registrations_tx: mpsc::UnboundedSender<(i32, oneshot::Sender<RemotingCommand>)>,
         receiver_shutdown: oneshot::Sender<()>,
     ) -> Self {
         Self {
+            addr,
             tx,
             registrations_tx,
             receiver_shutdown: Some(receiver_shutdown),
-            opaque_id: AtomicI32::new(0),
+            opaque_id: AtomicI32::new(1),
         }
     }
 
+    #[tracing::instrument(skip(self, cmd))]
     pub async fn send(&self, cmd: RemotingCommand) -> Result<RemotingCommand, Error> {
         let (sender, receiver) = oneshot::channel();
         let mut cmd = cmd;
         cmd.header.opaque = self.opaque_id.fetch_add(1, Ordering::SeqCst);
+        debug!(
+            code = cmd.code(),
+            opaque = cmd.header.opaque,
+            cmd = ?cmd,
+            "sending remoting command to {}",
+            &self.addr
+        );
         match (
             self.registrations_tx.send((cmd.header.opaque, sender)),
             self.tx.send(cmd),
@@ -60,6 +80,7 @@ impl ConnectionSender {
 }
 
 struct Receiver<S: Stream<Item = Result<RemotingCommand, Error>>> {
+    addr: String,
     inbound: Pin<Box<S>>,
     // internal sender
     outbound: mpsc::UnboundedSender<RemotingCommand>,
@@ -70,12 +91,14 @@ struct Receiver<S: Stream<Item = Result<RemotingCommand, Error>>> {
 
 impl<S: Stream<Item = Result<RemotingCommand, Error>>> Receiver<S> {
     pub fn new(
+        addr: String,
         inbound: S,
         outbound: mpsc::UnboundedSender<RemotingCommand>,
         registrations: mpsc::UnboundedReceiver<(i32, oneshot::Sender<RemotingCommand>)>,
         shutdown: oneshot::Receiver<()>,
     ) -> Receiver<S> {
         Self {
+            addr,
             inbound: Box::pin(inbound),
             outbound,
             pending_requests: HashMap::new(),
@@ -108,6 +131,14 @@ impl<S: Stream<Item = Result<RemotingCommand, Error>>> Future for Receiver<S> {
         loop {
             match self.inbound.as_mut().poll_next(ctx) {
                 Poll::Ready(Some(Ok(msg))) => {
+                    debug!(
+                        code = msg.code(),
+                        opaque = msg.header.opaque,
+                        remark = %msg.header.remark,
+                        cmd = ?msg,
+                        "received remoting command from {}",
+                        &self.addr
+                    );
                     if msg.is_response_type() {
                         if let Some(resolver) = self.pending_requests.remove(&msg.header.opaque) {
                             let _ = resolver.send(msg);
@@ -138,15 +169,17 @@ impl Connection {
         })
     }
 
+    #[tracing::instrument(name = "connect")]
     async fn prepare_stream(addr: String) -> Result<ConnectionSender, Error> {
-        info!("connecting to {}", &addr);
+        info!("connecting to server");
         let stream = TcpStream::connect(&addr)
             .await
             .map(|stream| tokio_util::codec::Framed::new(stream, MqCodec))?;
-        Connection::connect(stream).await
+        info!("server connected");
+        Connection::connect(addr, stream).await
     }
 
-    async fn connect<S>(stream: S) -> Result<ConnectionSender, Error>
+    async fn connect<S>(addr: String, stream: S) -> Result<ConnectionSender, Error>
     where
         S: Stream<Item = Result<RemotingCommand, Error>>,
         S: Sink<RemotingCommand, Error = Error>,
@@ -157,6 +190,7 @@ impl Connection {
         let (registrations_tx, registrations_rx) = mpsc::unbounded_channel();
         let (receiver_shutdown_tx, receiver_shutdown_rx) = oneshot::channel();
         tokio::spawn(Box::pin(Receiver::new(
+            addr.clone(),
             stream,
             tx.clone(),
             registrations_rx,
@@ -170,7 +204,7 @@ impl Connection {
                 }
             }
         }));
-        let sender = ConnectionSender::new(tx, registrations_tx, receiver_shutdown_tx);
+        let sender = ConnectionSender::new(addr, tx, registrations_tx, receiver_shutdown_tx);
         Ok(sender)
     }
 

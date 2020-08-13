@@ -81,7 +81,7 @@ pub struct Header {
     pub flag: i32,
     #[serde(default)]
     pub remark: String,
-    #[serde(default)]
+    #[serde(default, rename = "extFields")]
     pub ext_fields: HashMap<String, String>,
 }
 

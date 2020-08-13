@@ -11,7 +11,8 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use parking_lot::Mutex;
 use tokio::sync::broadcast;
 use tokio::time;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, info_span, warn};
+use tracing_futures::Instrument;
 
 use crate::consumer::ConsumerInner;
 use crate::namesrv::NameServer;
@@ -78,7 +79,7 @@ impl ClientOptions {
 impl Default for ClientOptions {
     fn default() -> Self {
         Self {
-            group_name: String::new(),
+            group_name: "DEFAULT_CONSUMER".to_string(),
             name_server_addrs: Vec::new(),
             client_ip: client_ip(),
             instance_name: "DEFAULT".to_string(),
@@ -175,45 +176,54 @@ where
                                 };
                             }
                             _ = shutdown_rx1.recv() => {
+                                info!("client shutdown, stop updating name server domain info");
                                 break;
                             }
                         }
                     }
-                });
+                }.instrument(info_span!("update_name_server_address")));
 
                 // Schedule update route info
                 let client = self.clone();
-                tokio::spawn(async move {
-                    time::delay_for(time::Duration::from_millis(10)).await;
-                    let mut interval = time::interval(time::Duration::from_secs(30));
-                    loop {
-                        tokio::select! {
-                            _ = interval.tick() => {
-                                let _ = client.update_topic_route_info().await;
-                            }
-                            _ = shutdown_rx2.recv() => {
-                                break;
+                tokio::spawn(
+                    async move {
+                        // time::delay_for(time::Duration::from_millis(10)).await;
+                        let mut interval = time::interval(time::Duration::from_secs(30));
+                        loop {
+                            tokio::select! {
+                                _ = interval.tick() => {
+                                    let _ = client.update_topic_route_info().await;
+                                }
+                                _ = shutdown_rx2.recv() => {
+                                    info!("client shutdown, stop updating topic route info");
+                                    break;
+                                }
                             }
                         }
                     }
-                });
+                    .instrument(info_span!("update_topic_route_info")),
+                );
 
                 // Schedule send heartbeat to all brokers
                 let client = self.clone();
-                tokio::spawn(async move {
-                    time::delay_for(time::Duration::from_secs(1)).await;
-                    let mut interval = time::interval(time::Duration::from_secs(30));
-                    loop {
-                        tokio::select! {
-                            _ = interval.tick() => {
-                                let _ = client.send_heartbeat_to_all_brokers().await;
-                            }
-                            _ = shutdown_rx3.recv() => {
-                                break;
+                tokio::spawn(
+                    async move {
+                        // time::delay_for(time::Duration::from_secs(1)).await;
+                        let mut interval = time::interval(time::Duration::from_secs(30));
+                        loop {
+                            tokio::select! {
+                                _ = interval.tick() => {
+                                    let _ = client.send_heartbeat_to_all_brokers().await;
+                                }
+                                _ = shutdown_rx3.recv() => {
+                                    info!("client shutdown, stop sending heartbeat to all brokers");
+                                    break;
+                                }
                             }
                         }
                     }
-                });
+                    .instrument(info_span!("send_heartbeat_to_all_brokers")),
+                );
 
                 // Persist offset
 
@@ -349,7 +359,12 @@ where
         // FIXME
         let consumer_data_set = Vec::new();
         if producer_data_set.is_empty() && consumer_data_set.is_empty() {
-            info!("sending heartbeat, but no producer and no consumer found");
+            debug!("sending heartbeat, but no producer and no consumer found");
+            return;
+        }
+        let broker_address_map = self.name_server.broker_address_map();
+        if broker_address_map.is_empty() {
+            debug!("sending heartbeat, but no brokers found");
             return;
         }
         let heartbeat_data = HeartbeatData {
@@ -358,7 +373,7 @@ where
             consumer_data_set,
         };
         let hb_bytes = serde_json::to_vec(&heartbeat_data).unwrap();
-        for (broker_name, broker_data) in self.name_server.broker_address_map() {
+        for (broker_name, broker_data) in broker_address_map {
             for (id, addr) in &broker_data.broker_addrs {
                 if heartbeat_data.consumer_data_set.is_empty() && *id != 0 {
                     continue;
@@ -414,6 +429,12 @@ where
     }
 
     pub fn update_publish_info(&self, topic: &str, data: TopicRouteData, changed: bool) {
+        debug!(
+            route_data = ?data,
+            changed = changed,
+            "update publish info for topic {}",
+            topic
+        );
         let producers = self.producers.lock();
         for producer in producers.values() {
             let mut producer = producer.lock();
@@ -438,10 +459,15 @@ where
                 topics.extend(producer.lock().publish_topic_list());
             }
         }
-
+        if topics.is_empty() {
+            debug!("updating topic route info, but no topics found");
+            return;
+        }
+        info!("update route info for topics: {:?}", topics);
         for topic in &topics {
             match self.name_server.update_topic_route_info(topic).await {
                 Ok((route_data, changed)) => {
+                    info!(route_data = ?route_data, changed = changed, "topic route info updated");
                     self.update_publish_info(topic, route_data, changed);
                 }
                 Err(err) => error!("update topic {} route info failed: {:?}", topic, err),

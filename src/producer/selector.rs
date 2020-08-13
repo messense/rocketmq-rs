@@ -78,7 +78,7 @@ impl QueueSelect for RoundRobinQueueSelector {
         let i = indexer
             .entry(topic.to_string())
             .and_modify(|e| *e = e.wrapping_add(1))
-            .or_insert(0);
+            .or_insert(1);
         let index = *i % mqs.len();
         mqs.get(index).cloned()
     }

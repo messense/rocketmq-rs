@@ -113,8 +113,6 @@ impl Message {
         }
         if wait_store_msg_ok {
             props.insert(Property::WAIT_STORE_MSG_OK.to_string(), "true".to_string());
-        } else {
-            props.insert(Property::WAIT_STORE_MSG_OK.to_string(), "false".to_string());
         }
         Message {
             topic,
@@ -128,11 +126,10 @@ impl Message {
         }
     }
 
-    pub fn unique_key(&self) -> Option<String> {
+    pub fn unique_key(&self) -> Option<&str> {
         self.properties
             .get(Property::UNIQ_CLIENT_MSG_ID_KEY)
-            .cloned()
-            .and_then(|val| if val.is_empty() { None } else { Some(val) })
+            .and_then(|val| if val.is_empty() { None } else { Some(&val[..]) })
     }
 
     pub fn set_unique_key(&mut self, unique_key: String) {
@@ -292,7 +289,7 @@ impl MessageExt {
                 }
             };
 
-            let msg = Message {
+            let message = Message {
                 topic,
                 flag,
                 sys_flag: 0,
@@ -302,11 +299,14 @@ impl MessageExt {
                 batch: false,
                 queue: None,
             };
-            let msg_id = msg.unique_key().unwrap_or_else(|| {
-                Self::get_message_offset_id(store_host_buf, store_host_port, physic_offset)
-            });
+            let msg_id = message
+                .unique_key()
+                .map(|key| key.to_string())
+                .unwrap_or_else(|| {
+                    Self::get_message_offset_id(store_host_buf, store_host_port, physic_offset)
+                });
             let msg_ex = MessageExt {
-                message: msg,
+                message,
                 queue_id,
                 store_size,
                 queue_offset,
