@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::net::IpAddr;
 use std::process;
 use std::sync::{
     atomic::{AtomicU8, Ordering},
@@ -62,7 +63,7 @@ impl ClientOptions {
         Self {
             group_name: group.to_string(),
             name_server_addrs: Vec::new(),
-            client_ip: client_ipv4(),
+            client_ip: client_ip(),
             instance_name: "DEFAULT".to_string(),
             unit_mode: false,
             unit_name: String::new(),
@@ -79,7 +80,7 @@ impl Default for ClientOptions {
         Self {
             group_name: String::new(),
             name_server_addrs: Vec::new(),
-            client_ip: client_ipv4(),
+            client_ip: client_ip(),
             instance_name: "DEFAULT".to_string(),
             unit_mode: false,
             unit_name: String::new(),
@@ -91,7 +92,17 @@ impl Default for ClientOptions {
     }
 }
 
-fn client_ipv4() -> String {
+fn client_ip() -> String {
+    client_ip_addr()
+        .map(|addr| match addr {
+            IpAddr::V4(v4) => v4.to_string(),
+            IpAddr::V6(v6) => format!("[{}]", v6),
+        })
+        .unwrap_or_else(|| "127.0.0.1".to_string())
+}
+
+fn client_ip_addr() -> Option<IpAddr> {
+    let mut ipv6_addrs = Vec::new();
     if let Ok(addrs) = get_if_addrs() {
         for addr in addrs {
             if addr.is_loopback() {
@@ -99,11 +110,19 @@ fn client_ipv4() -> String {
             }
             let ip = addr.ip();
             if ip.is_ipv4() {
-                return ip.to_string();
+                let ip_str = ip.to_string();
+                if ip_str.starts_with("127.0") || ip_str.starts_with("192.") {
+                    continue;
+                } else {
+                    return Some(ip);
+                }
+            } else {
+                ipv6_addrs.push(ip);
             }
         }
     }
-    "127.0.0.1".to_string()
+    // did not find ipv4 address, try ipv6
+    ipv6_addrs.first().cloned()
 }
 
 #[derive(Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
@@ -457,11 +476,11 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::client_ipv4;
+    use super::client_ip_addr;
 
     #[test]
-    fn test_client_ip_v4() {
-        let ip = client_ipv4();
-        assert_ne!(ip, "127.0.0.1");
+    fn test_client_ip_addr() {
+        let ip = client_ip_addr();
+        assert!(ip.is_some());
     }
 }
