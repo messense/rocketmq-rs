@@ -343,7 +343,7 @@ impl Producer {
 mod test {
     use super::Producer;
     use crate::error::{ClientError, Error};
-    use crate::message::Message;
+    use crate::message::{Message, MessageQueue};
 
     #[tokio::test]
     async fn test_producer_send_error_not_started() {
@@ -358,5 +358,47 @@ mod test {
         );
         let ret = producer.send(msg).await;
         matches!(ret.unwrap_err(), Error::Client(ClientError::NotStarted));
+    }
+
+    #[test]
+    fn test_producer_build_send_request_no_compression() {
+        let producer = Producer::new().unwrap();
+        let body = b"test".to_vec();
+        let msg = Message::new(
+            "test".to_string(),
+            String::new(),
+            String::new(),
+            0,
+            body.clone(),
+            true,
+        );
+        let mq = MessageQueue {
+            topic: "test".to_string(),
+            broker_name: "DefaultCluster".to_string(),
+            queue_id: 0,
+        };
+        let cmd = producer.build_send_request(&mq, msg).unwrap();
+        assert_eq!(body, cmd.body);
+    }
+
+    #[test]
+    fn test_producer_build_send_request_compressed() {
+        let producer = Producer::new().unwrap();
+        let body = b"test".to_vec().repeat(1024);
+        let msg = Message::new(
+            "test".to_string(),
+            String::new(),
+            String::new(),
+            0,
+            body.clone(),
+            true,
+        );
+        let mq = MessageQueue {
+            topic: "test".to_string(),
+            broker_name: "DefaultCluster".to_string(),
+            queue_id: 0,
+        };
+        let cmd = producer.build_send_request(&mq, msg).unwrap();
+        assert_ne!(body, cmd.body);
     }
 }
