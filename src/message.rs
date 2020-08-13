@@ -6,6 +6,9 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::read::ZlibDecoder;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+const NAME_VALUE_SEP: char = '\u{001}';
+const PROPERTY_SEP: char = '\u{002}';
+
 pub struct Property;
 
 impl Property {
@@ -141,17 +144,17 @@ impl Message {
         for (k, v) in &self.properties {
             s.reserve(k.len() + v.len() + 2);
             s.push_str(k);
-            s.push(char::from(1));
+            s.push(NAME_VALUE_SEP);
             s.push_str(v);
-            s.push(char::from(2));
+            s.push(PROPERTY_SEP);
         }
         s
     }
 
     fn parse_properties(prop_str: &str) -> HashMap<String, String> {
         let mut props = HashMap::new();
-        for item in prop_str.split(char::from(2)) {
-            let kv: Vec<&str> = item.split(char::from(1)).collect();
+        for item in prop_str.split(PROPERTY_SEP) {
+            let kv: Vec<&str> = item.split(NAME_VALUE_SEP).collect();
             if kv.len() == 2 {
                 props.insert(kv[0].to_string(), kv[1].to_string());
             }
