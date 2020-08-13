@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
-
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
+use std::process;
+use std::time::SystemTime;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::read::ZlibDecoder;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
+use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
 
 use crate::utils::client_ip_addr;
 
@@ -16,12 +18,19 @@ const PROPERTY_SEP: char = '\u{002}';
 
 static UNIQ_ID_GENERATOR: Lazy<Mutex<UniqueIdGenerator>> = Lazy::new(|| {
     let local_ip = client_ip_addr().unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
-    let mut ip_bytes = Vec::new();
+    let mut buf = Vec::new();
     match local_ip {
-        IpAddr::V4(v4) => ip_bytes.extend_from_slice(&v4.octets()),
-        IpAddr::V6(v6) => ip_bytes.extend_from_slice(&v6.octets()),
+        IpAddr::V4(v4) => buf.extend_from_slice(&v4.octets()),
+        IpAddr::V6(v6) => buf.extend_from_slice(&v6.octets()),
     };
-    let generator = UniqueIdGenerator { ip: ip_bytes };
+    buf.write_i16::<BigEndian>(process::id() as i16).unwrap();
+    buf.write_i32::<BigEndian>(0).unwrap(); // classLoaderId
+    let generator = UniqueIdGenerator {
+        counter: 0,
+        start_timestamp: 0,
+        next_timestamp: 0,
+        prefix: hex::encode_upper(buf),
+    };
     Mutex::new(generator)
 });
 
@@ -132,7 +141,9 @@ impl Message {
     }
 
     pub fn set_default_unique_key(&mut self) {
-        // FIXME: implement this
+        self.properties
+            .entry(Property::UNIQ_CLIENT_MSG_ID_KEY.to_string())
+            .or_insert_with(|| UNIQ_ID_GENERATOR.lock().generate());
     }
 
     pub fn get_property(&self, property: &str) -> Option<&String> {
@@ -325,12 +336,46 @@ impl MessageExt {
 }
 
 struct UniqueIdGenerator {
-    ip: Vec<u8>,
+    counter: i16,
+    prefix: String,
+    start_timestamp: i64,
+    next_timestamp: i64,
 }
 
 impl UniqueIdGenerator {
     fn generate(&mut self) -> String {
-        todo!()
+        if SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64
+            > self.next_timestamp
+        {
+            // update timestamp
+            let now = OffsetDateTime::now_local();
+            let year = now.year();
+            let month = now.month();
+            self.start_timestamp = PrimitiveDateTime::new(
+                Date::try_from_ymd(year, month, 1).unwrap(),
+                Time::try_from_hms(0, 0, 0).unwrap(),
+            )
+            .assume_offset(now.offset())
+            .timestamp();
+            self.next_timestamp = (PrimitiveDateTime::new(
+                Date::try_from_ymd(year, month, 1).unwrap(),
+                Time::try_from_hms(0, 0, 0).unwrap(),
+            )
+            .assume_offset(now.offset())
+                + time::Duration::days(30))
+            .timestamp();
+        }
+        self.counter += self.counter.wrapping_add(1);
+        let mut buf = Vec::new();
+        buf.write_i32::<BigEndian>(
+            ((OffsetDateTime::now_local().timestamp() - self.start_timestamp) * 1000) as i32,
+        )
+        .unwrap();
+        buf.write_i16::<BigEndian>(self.counter).unwrap();
+        self.prefix.clone() + &hex::encode(buf)
     }
 }
 

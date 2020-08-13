@@ -3,6 +3,7 @@ use std::net::IpAddr;
 use if_addrs::get_if_addrs;
 
 pub fn client_ip_addr() -> Option<IpAddr> {
+    let mut ipv4_addrs = Vec::new();
     let mut ipv6_addrs = Vec::new();
     if let Ok(addrs) = get_if_addrs() {
         for addr in addrs {
@@ -13,7 +14,7 @@ pub fn client_ip_addr() -> Option<IpAddr> {
             if ip.is_ipv4() {
                 let ip_str = ip.to_string();
                 if ip_str.starts_with("127.0") || ip_str.starts_with("192.") {
-                    continue;
+                    ipv4_addrs.push(ip);
                 } else {
                     return Some(ip);
                 }
@@ -23,7 +24,10 @@ pub fn client_ip_addr() -> Option<IpAddr> {
         }
     }
     // did not find ipv4 address, try ipv6
-    ipv6_addrs.first().cloned()
+    if let Some(addr) = ipv6_addrs.first() {
+        return Some(addr.clone());
+    }
+    ipv4_addrs.first().cloned()
 }
 
 #[cfg(test)]
