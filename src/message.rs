@@ -135,6 +135,29 @@ impl Message {
     pub fn topic(&self) -> &str {
         &self.topic
     }
+
+    pub(crate) fn dump_properties(&self) -> String {
+        let mut s = String::new();
+        for (k, v) in &self.properties {
+            s.reserve(k.len() + v.len() + 2);
+            s.push_str(k);
+            s.push(char::from(1));
+            s.push_str(v);
+            s.push(char::from(2));
+        }
+        s
+    }
+
+    fn parse_properties(prop_str: &str) -> HashMap<String, String> {
+        let mut props = HashMap::new();
+        for item in prop_str.split(char::from(2)) {
+            let kv: Vec<&str> = item.split(char::from(1)).collect();
+            if kv.len() == 2 {
+                props.insert(kv[0].to_string(), kv[1].to_string());
+            }
+        }
+        props
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -233,7 +256,7 @@ impl MessageExt {
                     let mut properties_buf = vec![0; properties_len as usize];
                     rdr.read_exact(&mut properties_buf).unwrap();
                     let properties_str = String::from_utf8(properties_buf).unwrap();
-                    Self::parse_properties(&properties_str)
+                    Message::parse_properties(&properties_str)
                 } else {
                     HashMap::new()
                 }
@@ -271,17 +294,6 @@ impl MessageExt {
             msgs.push(msg_ex);
         }
         msgs
-    }
-
-    fn parse_properties(prop_str: &str) -> HashMap<String, String> {
-        let mut props = HashMap::new();
-        for item in prop_str.split(char::from(2)) {
-            let kv: Vec<&str> = item.split(char::from(1)).collect();
-            if kv.len() == 2 {
-                props.insert(kv[0].to_string(), kv[1].to_string());
-            }
-        }
-        props
     }
 
     fn get_message_offset_id(store_host: [u8; 4], port: i32, commit_offset: i64) -> String {

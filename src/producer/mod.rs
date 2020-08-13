@@ -260,7 +260,7 @@ impl Producer {
             sys_flag,
             born_timestamp: 0,
             flag: msg.flag,
-            properties: "".to_string(), // FIXME serialize message properties
+            properties: msg.dump_properties(),
             reconsume_times: 0,
             unit_mode: self.options.client_options.unit_mode,
             max_reconsume_times: 0,
