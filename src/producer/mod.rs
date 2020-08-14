@@ -235,13 +235,15 @@ impl Producer {
         if !namespace.is_empty() {
             msg.topic = format!("{}%{}", namespace, msg.topic);
         }
-        // FIXME: define a ProducerError
-        let mq = self.select_message_queue(&msg).await?.unwrap();
+        let mq = self
+            .select_message_queue(&msg)
+            .await?
+            .ok_or(Error::EmptyRouteData)?;
         let addr = self
             .client
             .name_server
             .find_broker_addr_by_name(&mq.broker_name)
-            .unwrap();
+            .ok_or(Error::EmptyRouteData)?;
         let cmd = self.build_send_request(&mq, &mut msg)?;
         let res = self.client.invoke(&addr, cmd).await?;
         Self::process_send_response(&mq.broker_name, res, &[msg])
@@ -254,13 +256,15 @@ impl Producer {
         if !namespace.is_empty() {
             msg.topic = format!("{}%{}", namespace, msg.topic);
         }
-        // FIXME: define a ProducerError
-        let mq = self.select_message_queue(&msg).await?.unwrap();
+        let mq = self
+            .select_message_queue(&msg)
+            .await?
+            .ok_or(Error::EmptyRouteData)?;
         let addr = self
             .client
             .name_server
             .find_broker_addr_by_name(&mq.broker_name)
-            .unwrap();
+            .ok_or(Error::EmptyRouteData)?;
         let cmd = self.build_send_request(&mq, &mut msg)?;
         Ok(self.client.invoke_oneway(&addr, cmd).await?)
     }
