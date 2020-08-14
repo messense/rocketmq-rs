@@ -219,13 +219,17 @@ impl Producer {
         self.client.shutdown();
     }
 
-    pub async fn send(&self, msg: Message) -> Result<SendResult, Error> {
+    fn check_state(&self) -> Result<(), Error> {
         match self.client.state() {
-            ClientState::Created => return Err(Error::Client(ClientError::NotStarted)),
-            ClientState::StartFailed => return Err(Error::Client(ClientError::StartFailed)),
-            ClientState::Shutdown => return Err(Error::Client(ClientError::Shutdown)),
-            _ => {}
+            ClientState::Created => Err(Error::Client(ClientError::NotStarted)),
+            ClientState::StartFailed => Err(Error::Client(ClientError::StartFailed)),
+            ClientState::Shutdown => Err(Error::Client(ClientError::Shutdown)),
+            _ => Ok(()),
         }
+    }
+
+    pub async fn send(&self, msg: Message) -> Result<SendResult, Error> {
+        self.check_state()?;
         let mut msg = msg;
         let namespace = &self.options.client_options.namespace;
         if !namespace.is_empty() {
@@ -241,6 +245,24 @@ impl Producer {
         let cmd = self.build_send_request(&mq, &mut msg)?;
         let res = self.client.invoke(&addr, cmd).await?;
         Self::process_send_response(&mq.broker_name, res, &[msg])
+    }
+
+    pub async fn send_oneway(&self, msg: Message) -> Result<(), Error> {
+        self.check_state()?;
+        let mut msg = msg;
+        let namespace = &self.options.client_options.namespace;
+        if !namespace.is_empty() {
+            msg.topic = format!("{}%{}", namespace, msg.topic);
+        }
+        // FIXME: define a ProducerError
+        let mq = self.select_message_queue(&msg).await?.unwrap();
+        let addr = self
+            .client
+            .name_server
+            .find_broker_addr_by_name(&mq.broker_name)
+            .unwrap();
+        let cmd = self.build_send_request(&mq, &mut msg)?;
+        Ok(self.client.invoke_oneway(&addr, cmd).await?)
     }
 
     fn build_send_request(
@@ -433,6 +455,24 @@ mod test {
         );
         let ret = producer.send(msg).await.unwrap();
         assert_eq!(ret.status, SendStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn test_producer_send_message_oneway() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let msg = Message::new(
+            "SELF_TEST_TOPIC".to_string(),
+            String::new(),
+            String::new(),
+            0,
+            b"test_oneway".to_vec(),
+            false,
+        );
+        producer.send_oneway(msg).await.unwrap();
     }
 
     #[test]
