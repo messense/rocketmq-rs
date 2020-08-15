@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::io::Write;
+use std::io::{self, Write};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -245,7 +245,12 @@ impl Producer {
             .find_broker_addr_by_name(&mq.broker_name)
             .ok_or(Error::EmptyRouteData)?;
         let cmd = self.build_send_request(&mq, &mut msg)?;
-        let res = self.client.invoke(&addr, cmd).await?;
+        let res = tokio::time::timeout(
+            self.options.send_msg_timeout.clone(),
+            self.client.invoke(&addr, cmd),
+        )
+        .await
+        .map_err(|e| io::Error::new(io::ErrorKind::TimedOut, e))??;
         Self::process_send_response(&mq.broker_name, res, &[msg])
     }
 
