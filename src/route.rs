@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use rand::prelude::*;
 use serde::Deserialize;
 
 use crate::message::MessageQueue;
@@ -31,22 +30,6 @@ pub struct BrokerData {
     pub broker_addrs: HashMap<i64, String>,
 }
 
-impl BrokerData {
-    /// Selects a (preferably master) broker address from the registered list.
-    /// If the master's address cannot be found, a slave broker address is selected in a random manner.
-    pub fn select_broker_addr(&self) -> &str {
-        self.broker_addrs
-            .get(&0)
-            .or_else(|| {
-                let addrs: Vec<_> = self.broker_addrs.values().collect();
-                let mut rng = rand::thread_rng();
-                let index = rng.gen_range(0, addrs.len());
-                addrs.get(index).cloned()
-            })
-            .expect("No broker found")
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct TopicRouteData {
     #[serde(default, rename = "orderTopicConf")]
@@ -60,15 +43,6 @@ pub struct TopicRouteData {
 }
 
 impl TopicRouteData {
-    pub fn new() -> Self {
-        Self {
-            order_topic_conf: String::new(),
-            queue_datas: Vec::new(),
-            broker_datas: Vec::new(),
-            filter_server_table: HashMap::new(),
-        }
-    }
-
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let s = std::str::from_utf8(bytes).unwrap();
         // fixup fastjson mess
@@ -144,25 +118,4 @@ pub struct TopicPublishInfo {
     pub message_queues: Vec<MessageQueue>,
     pub route_data: TopicRouteData,
     pub queue_index: usize,
-}
-
-impl TopicPublishInfo {
-    pub fn new() -> Self {
-        let route_data = TopicRouteData::new();
-        Self {
-            order_topic: false,
-            have_topic_router_info: false,
-            message_queues: Vec::new(),
-            route_data,
-            queue_index: 0,
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.message_queues.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.message_queues.is_empty()
-    }
 }
