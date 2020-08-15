@@ -6,25 +6,101 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[repr(i16)]
 #[derive(Debug, Copy, Clone, PartialEq, IntoPrimitive, TryFromPrimitive)]
 pub enum RequestCode {
+    /// send message to broker
     SendMessage = 10,
+    /// subscribe message from broker
     PullMessage = 11,
+    /// query message from broker
+    QueryMessage = 12,
+    /// query broker offset
+    QueryBrokerOffset = 13,
+    /// query consumer offset from broker
     QueryConsumerOffset = 14,
+    /// update consumer offset to broker
     UpdateConsumerOffset = 15,
+    /// create or update topic to broker
+    UpdateAndCreateTopic = 17,
+    /// get all topic config info from broker
+    GetAllTopicConfig = 21,
+    /// get all topic list from broker
+    GetTopicConfigList = 22,
+    /// get topic name list from broker
+    GetTopicNameList = 23,
+    UpdateBrokerConfig = 25,
+    GetBrokerConfig = 26,
+    TriggerDeleteFiles = 27,
+    GetBrokerRuntimeInfo = 28,
     SearchOffsetByTimestamp = 29,
     GetMaxOffset = 30,
+    GetMinOffset = 31,
+    GetEarliestMsgStoreTime = 32,
+    ViewMessageById = 33,
+    /// send heartbeat to broker and register itself
     Heartbeat = 34,
+    /// unregister client from broker
     UnregisterClient = 35,
+    /// send back consume failed message to broker
     ConsumerSendMsgBack = 36,
+    /// commit or rollback transaction
     EndTransaction = 37,
+    /// get consumer list by group from broker
     GetConsumerListByGroup = 38,
     CheckTransactionState = 39,
+    /// broker send notify to consumer when consumer lists changes
     NotifyConsumerIdsChanged = 40,
+    /// lock mq before orderly consume
     LockBatchMQ = 41,
+    /// unlock mq after orderly consume
     UnlockBatchMQ = 42,
+    GetAllConsumerOffset = 43,
+    GetAllDelayOffset = 45,
+    PutKvConfig = 100,
+    GetKvConfig = 101,
+    DeleteKvConfig = 102,
+    RegisterBroker = 103,
+    UnregisterBroker = 104,
     GetRouteInfoByTopic = 105,
-    ResetConsumerOffset = 220,
+    GetBrokerClusterInfo = 106,
+    UpdateAndCreateSubscriptionGroup = 200,
+    GetAllSubscriptionGroupConfig = 201,
+    GetTopicStatsInfo = 202,
+    GetConsumerConnectionList = 203,
+    GetProducerConnectionList = 204,
+    WipeWritePermOfBroker = 205,
+    GetAllTopicListFromNameServer = 206,
+    DeleteSubscriptionGroup = 207,
+    GetConsumeStats = 208,
+    SuspendConsumer = 209,
+    ResumeConsumer = 210,
+    ResetConsumerOffsetInConsumer = 211,
+    ResetConsumerOffsetInBroker = 212,
+    AdjustConsumerThreadPool = 213,
+    WhoConsumeTheMessage = 214,
+    DeleteTopicInBroker = 215,
+    DeleteTopicInNameServer = 216,
+    GetKvConfigByValue = 217,
+    DeleteKvConfigByValue = 218,
+    GetKvListByNamespace = 219,
+    ResetConsumerClientOffset = 220,
+    GetConsumerStatusFromClient = 221,
+    InvokeBrokerToResetOffset = 222,
+    InvokeBrokerToGetConsumerStatus = 223,
+    QueryTopicsByCluster = 224,
+    RegisterFilterServer = 301,
+    RegisterMessageFilterClass = 302,
+    QueryConsumeTimeSpan = 303,
+    GetSystemTopicListFromNameServer = 304,
+    GetSystemTopicListFromBroker = 305,
+    CleanExpiredConsumeQueue = 306,
     GetConsumerRunningInfo = 307,
+    QueryConnectionOffset = 308,
     ConsumeMessageDirectly = 309,
+    SendMessageV2 = 310,
+    GetUnitTopicList = 311,
+    GetHasUnitSubTopicList = 312,
+    GetHasUnitSubUnunitTopicList = 313,
+    CloneGroupOffset = 314,
+    ViewBrokerStatsData = 315,
     SendBatchMessage = 320,
 }
 

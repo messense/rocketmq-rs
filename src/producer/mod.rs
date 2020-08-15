@@ -334,7 +334,7 @@ impl Producer {
         cmd: RemotingCommand,
         msgs: &[Message],
     ) -> Result<SendResult, Error> {
-        let status = match ResponseCode::try_from(cmd.code()).unwrap_or(ResponseCode::Error) {
+        let status = match ResponseCode::try_from(cmd.code()).unwrap_or(ResponseCode::SystemError) {
             ResponseCode::FlushDiskTimeout => SendStatus::FlushDiskTimeout,
             ResponseCode::FlushSlaveTimeout => SendStatus::FlushDiskTimeout,
             ResponseCode::SlaveNotAvailable => SendStatus::SlaveNotAvailable,
