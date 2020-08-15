@@ -246,3 +246,36 @@ impl EncodeRequestHeader for UnregisterClientRequestHeader {
         map
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct CreateTopicRequestHeader {
+    pub topic: String,
+    pub default_topic: String,
+    pub read_queue_nums: u32,
+    pub write_queue_nums: u32,
+    pub permission: i32,
+    pub topic_filter_type: String,
+    pub topic_sys_flag: i32,
+    pub order: bool,
+}
+
+impl EncodeRequestHeader for CreateTopicRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("topic".to_string(), self.topic);
+        map.insert("defaultTopic".to_string(), self.default_topic);
+        map.insert(
+            "readQueueNums".to_string(),
+            self.read_queue_nums.to_string(),
+        );
+        map.insert(
+            "writeQueueNums".to_string(),
+            self.write_queue_nums.to_string(),
+        );
+        map.insert("perm".to_string(), self.permission.to_string());
+        map.insert("topicFilterType".to_string(), self.topic_filter_type);
+        map.insert("topicSysFlag".to_string(), self.topic_sys_flag.to_string());
+        map.insert("order".to_string(), self.order.to_string());
+        map
+    }
+}

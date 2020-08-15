@@ -18,12 +18,12 @@ use crate::consumer::ConsumerInner;
 use crate::namesrv::NameServer;
 use crate::producer::{ProducerInner, PullResult, PullStatus};
 use crate::protocol::{
-    request::{PullMessageRequestHeader, UnregisterClientRequestHeader},
+    request::{CreateTopicRequestHeader, PullMessageRequestHeader, UnregisterClientRequestHeader},
     RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::remoting::RemotingClient;
 use crate::resolver::NsResolver;
-use crate::route::TopicRouteData;
+use crate::route::{TopicRouteData, MASTER_ID};
 use crate::utils::client_ip_addr;
 use crate::Error;
 
@@ -496,5 +496,81 @@ where
                 }
             }
         }
+    }
+
+    pub async fn create_topic(
+        &self,
+        key: &str,
+        new_topic: &model::TopicConfig,
+    ) -> Result<(), Error> {
+        let mut last_error = None;
+        let mut create_ok_at_least_once = false;
+        let route_data = self.name_server.query_topic_route_info(key).await?;
+        let broker_datas = route_data.broker_datas;
+        if broker_datas.is_empty() {
+            return Err(Error::EmptyRouteData);
+        }
+        for broker_data in broker_datas {
+            if let Some(addr) = broker_data.broker_addrs.get(&MASTER_ID) {
+                for _ in 0..5usize {
+                    let header = CreateTopicRequestHeader {
+                        topic: new_topic.topic_name.clone(),
+                        default_topic: "TBW102".to_string(), // FIXME
+                        read_queue_nums: new_topic.read_queue_nums,
+                        write_queue_nums: new_topic.write_queue_nums,
+                        permission: new_topic.permission.bits(),
+                        topic_filter_type: new_topic.topic_filter_type.to_string(),
+                        topic_sys_flag: new_topic.topic_sys_flag,
+                        order: new_topic.order,
+                    };
+                    let cmd = RemotingCommand::with_header(
+                        RequestCode::UpdateAndCreateTopic,
+                        header,
+                        Vec::new(),
+                    );
+                    match self.remote_client.invoke(addr, cmd).await {
+                        Ok(res) => {
+                            if res.code() == ResponseCode::Success {
+                                create_ok_at_least_once = true;
+                                break;
+                            }
+                        }
+                        Err(err) => last_error = Some(err),
+                    }
+                }
+            }
+        }
+        if let Some(err) = last_error {
+            if !create_ok_at_least_once {
+                return Err(err);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{model::TopicConfig, Client, ClientOptions};
+    use crate::namesrv::NameServer;
+    use crate::resolver::{Resolver, StaticResolver};
+
+    fn new_client() -> Client<Resolver> {
+        let options = ClientOptions::default();
+        let name_server = NameServer::new(
+            Resolver::Static(StaticResolver::new(vec!["localhost:9876".to_string()])),
+            options.credentials.clone(),
+        )
+        .unwrap();
+        Client::new(options, name_server)
+    }
+
+    #[tokio::test]
+    async fn test_client_create_topic() {
+        let client = new_client();
+        client
+            .create_topic("DefaultCluster", &TopicConfig::new("test"))
+            .await
+            .unwrap();
     }
 }
