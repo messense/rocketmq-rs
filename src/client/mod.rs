@@ -18,7 +18,8 @@ use crate::consumer::ConsumerInner;
 use crate::namesrv::NameServer;
 use crate::producer::{ProducerInner, PullResult, PullStatus};
 use crate::protocol::{
-    request::PullMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
+    request::{PullMessageRequestHeader, UnregisterClientRequestHeader},
+    RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::remoting::RemotingClient;
 use crate::resolver::NsResolver;
@@ -471,6 +472,28 @@ where
                     self.update_publish_info(topic, route_data, changed);
                 }
                 Err(err) => error!("update topic {} route info failed: {:?}", topic, err),
+            }
+        }
+    }
+
+    async fn unregister_client(&self, producer_group: &str, consumer_group: &str) {
+        for broker_data in self.name_server.broker_address_map().values() {
+            for broker_addr in broker_data.broker_addrs.values() {
+                let header = UnregisterClientRequestHeader {
+                    client_id: self.id(),
+                    producer_group: producer_group.to_string(),
+                    consumer_group: consumer_group.to_string(),
+                };
+                let cmd =
+                    RemotingCommand::with_header(RequestCode::UnregisterClient, header, Vec::new());
+                match self.remote_client.invoke(broker_addr, cmd).await {
+                    Ok(res) => {
+                        if res.code() != ResponseCode::Success {
+                            warn!(code = res.code(), remark = %res.header.remark, "unregister client failed");
+                        }
+                    }
+                    Err(err) => warn!("unregister client failed: {:?}", err),
+                }
             }
         }
     }

@@ -5,7 +5,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use crate::Error;
 
 #[repr(i16)]
-#[derive(Debug, Copy, Clone, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, Copy, Clone, PartialEq, IntoPrimitive, TryFromPrimitive)]
 pub enum ResponseCode {
     Success = 0,
     Error = 1,
@@ -24,6 +24,12 @@ impl ResponseCode {
             code,
             message: format!("invalid response code {}", code),
         })
+    }
+}
+
+impl PartialEq<ResponseCode> for i16 {
+    fn eq(&self, other: &ResponseCode) -> bool {
+        *self == *other as i16
     }
 }
 

@@ -4,7 +4,7 @@ use std::time::Duration;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 #[repr(i16)]
-#[derive(Debug, Copy, Clone, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, Copy, Clone, PartialEq, IntoPrimitive, TryFromPrimitive)]
 pub enum RequestCode {
     SendMessage = 10,
     PullMessage = 11,
@@ -13,6 +13,7 @@ pub enum RequestCode {
     SearchOffsetByTimestamp = 29,
     GetMaxOffset = 30,
     Heartbeat = 34,
+    UnregisterClient = 35,
     ConsumerSendMsgBack = 36,
     EndTransaction = 37,
     GetConsumerListByGroup = 38,
@@ -149,6 +150,23 @@ impl EncodeRequestHeader for PullMessageRequestHeader {
         map.insert("subscription".to_string(), self.sub_expression);
         map.insert("subVersion".to_string(), self.sub_version.to_string());
         map.insert("expressionType".to_string(), self.expression_type);
+        map
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UnregisterClientRequestHeader {
+    pub client_id: String,
+    pub producer_group: String,
+    pub consumer_group: String,
+}
+
+impl EncodeRequestHeader for UnregisterClientRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("clientID".to_string(), self.client_id);
+        map.insert("producerGroup".to_string(), self.producer_group);
+        map.insert("consumerGroup".to_string(), self.consumer_group);
         map
     }
 }
