@@ -379,9 +379,9 @@ where
                     continue;
                 }
                 debug!(
-                    broker_name = &broker_name[..],
+                    broker_name = %broker_name,
                     broker_id = id,
-                    broker_addr = &addr[..],
+                    broker_addr = %addr,
                     "try to send heart beat to broker",
                 );
                 let cmd = RemotingCommand::new(
@@ -405,17 +405,17 @@ where
                                 res.header.version as i32,
                             );
                             info!(
-                                broker_name = &broker_name[..],
+                                broker_name = %broker_name,
                                 broker_id = id,
-                                broker_addr = &addr[..],
+                                broker_addr = %addr,
                                 "send heart beat to broker success",
                             );
                         }
                         _ => {
                             warn!(
-                                broker_name = &broker_name[..],
+                                broker_name = %broker_name,
                                 broker_id = id,
-                                broker_addr = &addr[..],
+                                broker_addr = %addr,
                                 code = res.code(),
                                 "send heart beat to broker failed",
                             );
