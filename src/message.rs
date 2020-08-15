@@ -9,6 +9,7 @@ use flate2::read::ZlibDecoder;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
 
 use crate::utils::client_ip_addr;
@@ -76,10 +77,12 @@ pub enum MessageSysFlag {
     TransactionRollbackType = 0x3 << 2,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct MessageQueue {
     pub topic: String,
+    #[serde(rename = "brokerName")]
     pub broker_name: String,
+    #[serde(rename = "queueId")]
     pub queue_id: u32,
 }
 

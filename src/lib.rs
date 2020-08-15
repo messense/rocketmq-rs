@@ -1,5 +1,5 @@
 mod client;
-mod consumer;
+pub mod consumer;
 mod error;
 mod message;
 mod namesrv;
@@ -13,5 +13,6 @@ pub mod resolver;
 mod route;
 mod utils;
 
+pub use consumer::{ConsumerOptions, PushConsumer};
 pub use error::Error;
 pub use producer::{Producer, ProducerOptions};
