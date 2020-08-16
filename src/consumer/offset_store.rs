@@ -1,15 +1,20 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use crate::client::Client;
 use crate::message::MessageQueue;
+use crate::protocol::{
+    request::{QueryConsumerOffsetRequestHeader, UpdateConsumerOffsetRequestHeader},
+    RemotingCommand, RequestCode, ResponseCode,
+};
 use crate::resolver::Resolver;
+use crate::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ReadType {
@@ -27,9 +32,37 @@ pub enum OffsetStorage {
 #[async_trait]
 pub trait OffsetStore {
     async fn persist(&self, mqs: &[MessageQueue]);
-    fn remove(&self, mq: &MessageQueue);
     async fn read(&self, mq: &MessageQueue, read_type: ReadType) -> i64;
     fn update(&self, mq: &MessageQueue, offset: i64, increase_only: bool);
+    fn remove(&self, mq: &MessageQueue);
+}
+
+#[async_trait]
+impl OffsetStore for OffsetStorage {
+    async fn persist(&self, mqs: &[MessageQueue]) {
+        match self {
+            OffsetStorage::LocalFile(store) => store.persist(mqs).await,
+            OffsetStorage::RemoteBroker(store) => store.persist(mqs).await,
+        }
+    }
+    async fn read(&self, mq: &MessageQueue, read_type: ReadType) -> i64 {
+        match self {
+            OffsetStorage::LocalFile(store) => store.read(mq, read_type).await,
+            OffsetStorage::RemoteBroker(store) => store.read(mq, read_type).await,
+        }
+    }
+    fn update(&self, mq: &MessageQueue, offset: i64, increase_only: bool) {
+        match self {
+            OffsetStorage::LocalFile(store) => store.update(mq, offset, increase_only),
+            OffsetStorage::RemoteBroker(store) => store.update(mq, offset, increase_only),
+        }
+    }
+    fn remove(&self, mq: &MessageQueue) {
+        match self {
+            OffsetStorage::LocalFile(store) => store.remove(mq),
+            OffsetStorage::RemoteBroker(store) => store.remove(mq),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -46,7 +79,7 @@ pub struct LocalFileOffsetStore {
 }
 
 impl LocalFileOffsetStore {
-    pub fn new(client_id: &str, group: &str) -> Self {
+    pub fn new(group: &str, client_id: &str) -> Self {
         let store_path = env::var("rocketmq.client.localOffsetStoreDir")
             .unwrap_or_else(|_| env::var("HOME").unwrap() + ".rocketmq_client_rust");
         Self {
@@ -171,8 +204,97 @@ impl RemoteBrokerOffsetStore {
         self.offset_table.lock().get(mq).cloned().unwrap_or(-1)
     }
 
-    async fn read_from_broker(&self, mq: MessageQueue) -> i64 {
-        todo!()
+    async fn read_from_broker(&self, mq: &MessageQueue) -> i64 {
+        match self.fetch_consumer_offset_from_broker(mq).await {
+            Ok(offset) => {
+                info!(consumer_group = %self.group, message_queue = ?mq, "fetch offset of message queue from broker success");
+                self.update(&mq, offset, true);
+                offset
+            }
+            Err(err) => {
+                error!(consumer_group = %self.group, message_queue = ?mq, "fetch offset of message queue from broker error: {:?}", err);
+                -1
+            }
+        }
+    }
+
+    async fn fetch_consumer_offset_from_broker(&self, mq: &MessageQueue) -> Result<i64, Error> {
+        let broker_addr = {
+            match self
+                .client
+                .name_server
+                .find_broker_addr_by_name(&mq.broker_name)
+            {
+                Some(addr) => Some(addr),
+                None => {
+                    self.client
+                        .name_server
+                        .update_topic_route_info(&mq.topic)
+                        .await?;
+                    self.client
+                        .name_server
+                        .find_broker_addr_by_name(&mq.broker_name)
+                }
+            }
+        };
+        if let Some(addr) = broker_addr {
+            let header = QueryConsumerOffsetRequestHeader {
+                consumer_group: self.group.clone(),
+                topic: mq.topic.clone(),
+                queue_id: mq.queue_id,
+            };
+            let cmd =
+                RemotingCommand::with_header(RequestCode::QueryConsumerOffset, header, Vec::new());
+            let res = self.client.invoke(&addr, cmd).await?;
+            if res.code() != ResponseCode::Success {
+                return Err(Error::ResponseError {
+                    code: res.code(),
+                    message: res.header.remark,
+                });
+            }
+            let offset: i64 = res.header.ext_fields["offset"].parse().unwrap_or(-1);
+            return Ok(offset);
+        }
+        Err(Error::EmptyRouteData)
+    }
+
+    async fn update_consumer_offset_to_broker(
+        &self,
+        mq: &MessageQueue,
+        offset: i64,
+    ) -> Result<(), Error> {
+        let broker_addr = {
+            match self
+                .client
+                .name_server
+                .find_broker_addr_by_name(&mq.broker_name)
+            {
+                Some(addr) => Some(addr),
+                None => {
+                    self.client
+                        .name_server
+                        .update_topic_route_info(&mq.topic)
+                        .await?;
+                    self.client
+                        .name_server
+                        .find_broker_addr_by_name(&mq.broker_name)
+                }
+            }
+        };
+        if let Some(addr) = broker_addr {
+            let header = UpdateConsumerOffsetRequestHeader {
+                consumer_group: self.group.clone(),
+                topic: mq.topic.clone(),
+                queue_id: mq.queue_id,
+                commit_offset: offset,
+            };
+            let cmd =
+                RemotingCommand::with_header(RequestCode::UpdateConsumerOffset, header, Vec::new());
+            self.client.invoke_oneway(&addr, cmd).await?;
+            Ok(())
+        } else {
+            Err(Error::EmptyRouteData)
+        }
     }
 }
 
@@ -182,7 +304,30 @@ impl OffsetStore for RemoteBrokerOffsetStore {
         if mqs.is_empty() {
             return;
         }
-        todo!()
+        let mqs_set: HashSet<MessageQueue> = mqs.iter().cloned().collect();
+        let mut unused = HashSet::new();
+        // FIXME: use tokio Mutex to lock accross await point?
+        let offset_table = self.offset_table.lock().clone();
+        for (mq, offset) in offset_table {
+            if mqs_set.contains(&mq) {
+                match self.update_consumer_offset_to_broker(&mq, offset).await {
+                    Ok(_) => {
+                        info!(consumer_group = %self.group, message_queue = ?mq, "update offset to broker success")
+                    }
+                    Err(err) => {
+                        error!(consumer_group = %self.group, message_queue = ?mq, "update offset to broker error: {:?}", err)
+                    }
+                }
+            } else {
+                unused.insert(mq);
+            }
+        }
+        if !unused.is_empty() {
+            let mut offset_table = self.offset_table.lock();
+            for mq in &unused {
+                offset_table.remove(mq);
+            }
+        }
     }
 
     fn remove(&self, mq: &MessageQueue) {
@@ -198,9 +343,9 @@ impl OffsetStore for RemoteBrokerOffsetStore {
                 if offset != -1 {
                     return offset;
                 }
-                self.read_from_broker(mq.clone()).await
+                self.read_from_broker(mq).await
             }
-            ReadType::Store => self.read_from_broker(mq.clone()).await,
+            ReadType::Store => self.read_from_broker(mq).await,
         }
     }
 

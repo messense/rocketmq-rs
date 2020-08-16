@@ -108,6 +108,12 @@ pub trait EncodeRequestHeader {
     fn encode(self) -> HashMap<String, String>;
 }
 
+impl EncodeRequestHeader for HashMap<String, String> {
+    fn encode(self) -> HashMap<String, String> {
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SendMessageRequestHeader {
     pub producer_group: String,
@@ -276,6 +282,42 @@ impl EncodeRequestHeader for CreateTopicRequestHeader {
         map.insert("topicFilterType".to_string(), self.topic_filter_type);
         map.insert("topicSysFlag".to_string(), self.topic_sys_flag.to_string());
         map.insert("order".to_string(), self.order.to_string());
+        map
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryConsumerOffsetRequestHeader {
+    pub consumer_group: String,
+    pub topic: String,
+    pub queue_id: u32,
+}
+
+impl EncodeRequestHeader for QueryConsumerOffsetRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("consumerGroup".to_string(), self.consumer_group);
+        map.insert("topic".to_string(), self.topic);
+        map.insert("queueId".to_string(), self.queue_id.to_string());
+        map
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateConsumerOffsetRequestHeader {
+    pub consumer_group: String,
+    pub topic: String,
+    pub queue_id: u32,
+    pub commit_offset: i64,
+}
+
+impl EncodeRequestHeader for UpdateConsumerOffsetRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("consumerGroup".to_string(), self.consumer_group);
+        map.insert("topic".to_string(), self.topic);
+        map.insert("queueId".to_string(), self.queue_id.to_string());
+        map.insert("commitOffset".to_string(), self.commit_offset.to_string());
         map
     }
 }

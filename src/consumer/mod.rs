@@ -12,6 +12,7 @@ use crate::Error;
 mod offset_store;
 mod push;
 
+use offset_store::{LocalFileOffsetStore, OffsetStorage, RemoteBrokerOffsetStore};
 pub use push::PushConsumer;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -123,6 +124,7 @@ pub struct Consumer {
     inner: Arc<Mutex<ConsumerInner>>,
     options: ConsumerOptions,
     client: Client<Resolver>,
+    storage: OffsetStorage,
 }
 
 impl Consumer {
@@ -135,10 +137,22 @@ impl Consumer {
         let inner = Arc::new(Mutex::new(ConsumerInner {}));
         let name_server =
             NameServer::new(options.resolver.clone(), client_options.credentials.clone())?;
+        let client = Client::new(client_options, name_server);
+        let consumer_group = &options.client_options.group_name;
+        let offset_store = match options.message_model {
+            MessageModel::Clustering => OffsetStorage::RemoteBroker(RemoteBrokerOffsetStore::new(
+                consumer_group,
+                client.clone(),
+            )),
+            MessageModel::BroadCasting => {
+                OffsetStorage::LocalFile(LocalFileOffsetStore::new(consumer_group, &client.id()))
+            }
+        };
         Ok(Self {
             inner,
             options,
-            client: Client::new(client_options, name_server),
+            client,
+            storage: offset_store,
         })
     }
 }
