@@ -12,6 +12,7 @@ pub enum Error {
     InvalidHeader(String),
     EmptyNameServers,
     EmptyRouteData,
+    EmptyBatchMessage,
     TopicNotExist(String),
     ResponseError { code: i16, message: String },
 }
@@ -28,6 +29,7 @@ impl fmt::Display for Error {
             Error::InvalidHeader(ref err) => write!(f, "invalid header: {}", err),
             Error::EmptyNameServers => write!(f, "name server addresses are empty"),
             Error::EmptyRouteData => write!(f, "route data is empty"),
+            Error::EmptyBatchMessage => write!(f, "batch message is empty"),
             Error::TopicNotExist(ref topic) => write!(f, "topic {} not exist", topic),
             Error::ResponseError { code, message } => {
                 write!(f, "response error, code: {}, message: {}", code, message)

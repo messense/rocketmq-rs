@@ -11,8 +11,8 @@ Rust client for Apache RocketMQ.
 
 `rocketmq-rs` is currently **working in progress**, it supports:
 
-* Send messages in asynchronous mode
-* Send messages in oneway mode
+* Send message in asynchronous/oneway mode
+* Send batch messages in asynchronous/oneway mode
 * ACL
 
 features to be implemented:

@@ -161,6 +161,43 @@ impl EncodeRequestHeader for SendMessageRequestHeader {
 }
 
 #[derive(Debug, Clone)]
+pub struct SendMessageRequestV2Header {
+    pub producer_group: String,
+    pub topic: String,
+    pub queue_id: u32,
+    pub sys_flag: i32,
+    pub born_timestamp: i64,
+    pub flag: i32,
+    pub properties: String,
+    pub reconsume_times: i32,
+    pub unit_mode: bool,
+    pub max_reconsume_times: i32,
+    pub batch: bool,
+    pub default_topic: String,
+    pub default_topic_queue_nums: i32,
+}
+
+impl EncodeRequestHeader for SendMessageRequestV2Header {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("a".to_string(), self.producer_group);
+        map.insert("b".to_string(), self.topic);
+        map.insert("c".to_string(), self.default_topic);
+        map.insert("d".to_string(), self.default_topic_queue_nums.to_string());
+        map.insert("e".to_string(), self.queue_id.to_string());
+        map.insert("f".to_string(), self.sys_flag.to_string());
+        map.insert("g".to_string(), self.born_timestamp.to_string());
+        map.insert("h".to_string(), self.flag.to_string());
+        map.insert("i".to_string(), self.properties);
+        map.insert("j".to_string(), self.reconsume_times.to_string());
+        map.insert("k".to_string(), self.unit_mode.to_string());
+        map.insert("l".to_string(), self.max_reconsume_times.to_string());
+        map.insert("m".to_string(), self.batch.to_string());
+        map
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct CheckTransactionStateRequestHeader {
     pub tran_state_table_offset: i64,
     pub commit_log_offset: i64,

@@ -15,7 +15,8 @@ use crate::message::{Message, MessageExt, MessageQueue, MessageSysFlag, Property
 use crate::namesrv::NameServer;
 use crate::producer::selector::QueueSelect;
 use crate::protocol::{
-    request::SendMessageRequestHeader, RemotingCommand, RequestCode, ResponseCode,
+    request::{SendMessageRequestHeader, SendMessageRequestV2Header},
+    RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
@@ -254,6 +255,11 @@ impl Producer {
         Self::process_send_response(&mq.broker_name, res, &[msg])
     }
 
+    pub async fn send_batch(&self, msgs: &[Message]) -> Result<SendResult, Error> {
+        let msg = Message::encode_batch(msgs)?;
+        Ok(self.send(msg).await?)
+    }
+
     pub async fn send_oneway(&self, msg: Message) -> Result<(), Error> {
         self.check_state()?;
         let mut msg = msg;
@@ -274,6 +280,11 @@ impl Producer {
         Ok(self.client.invoke_oneway(&addr, cmd).await?)
     }
 
+    pub async fn send_batch_oneway(&self, msgs: &[Message]) -> Result<(), Error> {
+        let msg = Message::encode_batch(msgs)?;
+        Ok(self.send_oneway(msg).await?)
+    }
+
     fn build_send_request(
         &self,
         mq: &MessageQueue,
@@ -288,22 +299,6 @@ impl Producer {
                 sys_flag |= tran_prepared;
             }
         }
-        let header = SendMessageRequestHeader {
-            producer_group: self.options.group_name().to_string(),
-            topic: mq.topic.clone(),
-            queue_id: mq.queue_id,
-            sys_flag,
-            born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::unix_epoch())
-                .whole_milliseconds() as i64,
-            flag: msg.flag,
-            properties: msg.dump_properties(),
-            reconsume_times: 0,
-            unit_mode: self.options.client_options.unit_mode,
-            max_reconsume_times: 0,
-            batch: msg.batch,
-            default_topic: self.options.create_topic_key.clone(),
-            default_topic_queue_nums: self.options.default_topic_queue_nums,
-        };
         let body = if !msg.batch {
             let compressed_flag: i32 = MessageSysFlag::Compressed.into();
             if msg.sys_flag & compressed_flag == compressed_flag {
@@ -324,8 +319,43 @@ impl Producer {
         } else {
             msg.body.clone()
         };
-        // FIXME: handle batch message
-        let cmd = RemotingCommand::with_header(RequestCode::SendMessage, header, body);
+        let cmd = if msg.batch {
+            let header = SendMessageRequestV2Header {
+                producer_group: self.options.group_name().to_string(),
+                topic: mq.topic.clone(),
+                queue_id: mq.queue_id,
+                sys_flag,
+                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::unix_epoch())
+                    .whole_milliseconds() as i64,
+                flag: msg.flag,
+                properties: msg.dump_properties(),
+                reconsume_times: 0,
+                unit_mode: self.options.client_options.unit_mode,
+                max_reconsume_times: 0,
+                batch: msg.batch,
+                default_topic: self.options.create_topic_key.clone(),
+                default_topic_queue_nums: self.options.default_topic_queue_nums,
+            };
+            RemotingCommand::with_header(RequestCode::SendMessageV2, header, body)
+        } else {
+            let header = SendMessageRequestHeader {
+                producer_group: self.options.group_name().to_string(),
+                topic: mq.topic.clone(),
+                queue_id: mq.queue_id,
+                sys_flag,
+                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::unix_epoch())
+                    .whole_milliseconds() as i64,
+                flag: msg.flag,
+                properties: msg.dump_properties(),
+                reconsume_times: 0,
+                unit_mode: self.options.client_options.unit_mode,
+                max_reconsume_times: 0,
+                batch: msg.batch,
+                default_topic: self.options.create_topic_key.clone(),
+                default_topic_queue_nums: self.options.default_topic_queue_nums,
+            };
+            RemotingCommand::with_header(RequestCode::SendMessage, header, body)
+        };
         Ok(cmd)
     }
 
@@ -467,6 +497,64 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_producer_send_batch_message_empty() {
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let ret = producer.send_batch(&[]).await;
+        assert!(matches!(ret.unwrap_err(), Error::EmptyBatchMessage));
+    }
+
+    #[tokio::test]
+    async fn test_producer_send_batch_message_one_msg() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let msg = Message::new(
+            "SELF_TEST_TOPIC".to_string(),
+            String::new(),
+            String::new(),
+            0,
+            b"test-batch-1".to_vec(),
+            false,
+        );
+        let ret = producer.send_batch(&[msg]).await.unwrap();
+        assert_eq!(ret.status, SendStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn test_producer_send_batch_message_multi_msg() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let msgs = [
+            Message::new(
+                "SELF_TEST_TOPIC".to_string(),
+                String::new(),
+                String::new(),
+                0,
+                b"test-batch-1".to_vec(),
+                false,
+            ),
+            Message::new(
+                "SELF_TEST_TOPIC".to_string(),
+                String::new(),
+                String::new(),
+                0,
+                b"test-batch-2".to_vec(),
+                false,
+            ),
+        ];
+        let ret = producer.send_batch(&msgs).await.unwrap();
+        assert_eq!(ret.status, SendStatus::Ok);
+    }
+
+    #[tokio::test]
     async fn test_producer_send_message_oneway() {
         // tracing_subscriber::fmt::init();
         let mut options = ProducerOptions::default();
@@ -482,6 +570,62 @@ mod test {
             false,
         );
         producer.send_oneway(msg).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_producer_send_batch_oneway_message_empty() {
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let ret = producer.send_batch_oneway(&[]).await;
+        assert!(matches!(ret.unwrap_err(), Error::EmptyBatchMessage));
+    }
+
+    #[tokio::test]
+    async fn test_producer_send_batch_oneway_message_one_msg() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let msg = Message::new(
+            "SELF_TEST_TOPIC".to_string(),
+            String::new(),
+            String::new(),
+            0,
+            b"test-batch-oneway-1".to_vec(),
+            false,
+        );
+        producer.send_batch_oneway(&[msg]).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_producer_send_batch_oneway_message_multi_msg() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let msgs = [
+            Message::new(
+                "SELF_TEST_TOPIC".to_string(),
+                String::new(),
+                String::new(),
+                0,
+                b"test-batch-oneway-1".to_vec(),
+                false,
+            ),
+            Message::new(
+                "SELF_TEST_TOPIC".to_string(),
+                String::new(),
+                String::new(),
+                0,
+                b"test-batch-oneway-2".to_vec(),
+                false,
+            ),
+        ];
+        producer.send_batch_oneway(&msgs).await.unwrap();
     }
 
     #[test]

@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
 
 use crate::utils::client_ip_addr;
+use crate::Error;
 
 const NAME_VALUE_SEP: char = '\u{001}';
 const PROPERTY_SEP: char = '\u{002}';
@@ -187,6 +188,46 @@ impl Message {
             }
         }
         props
+    }
+
+    fn encode_into(&self, buf: &mut Vec<u8>) -> Result<(), Error> {
+        let properties = self.dump_properties();
+        let store_size = 4 + 4 + 4 + 4 + 4 + self.body.len() + properties.len();
+        // TotalSize Magic BodyCrc Flag BodySize Body PropertySize Property
+        buf.reserve(store_size);
+        buf.write_u32::<BigEndian>(store_size as u32)?; // 1. TotalSize
+        buf.write_u32::<BigEndian>(0)?; // 2. Magic
+        buf.write_u32::<BigEndian>(0)?; // 3. BodyCrc
+        buf.write_u32::<BigEndian>(self.flag as u32)?; // 4. Flag
+        buf.write_u32::<BigEndian>(self.body.len() as u32)?; // 5. BodySize
+        buf.write_all(&self.body)?; //  6. Body
+        buf.write_u16::<BigEndian>(properties.len() as u16)?; // 7. PropertySize
+        buf.write_all(properties.as_bytes())?; // 8. Property
+        Ok(())
+    }
+
+    pub fn encode_batch(msgs: &[Message]) -> Result<Message, Error> {
+        if msgs.is_empty() {
+            Err(Error::EmptyBatchMessage)
+        } else if msgs.len() == 1 {
+            Ok(msgs[0].clone())
+        } else {
+            let mut body = Vec::new();
+            for msg in msgs {
+                msg.encode_into(&mut body)?;
+            }
+            let msg = &msgs[0];
+            Ok(Message {
+                topic: msg.topic.clone(),
+                queue: msg.queue.clone(),
+                flag: 0,
+                sys_flag: 0,
+                properties: HashMap::new(),
+                body,
+                transaction_id: String::new(),
+                batch: true,
+            })
+        }
     }
 }
 
