@@ -120,6 +120,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "consistent_hash_ring"
+version = "0.7.1"
+source = "git+https://github.com/nytopop/consistent_hash_ring.git#bfad61d11f11866664b3a59cad31a89b4be3e065"
+dependencies = [
+ "fnv",
+]
+
+[[package]]
 name = "cpuid-bool"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -946,6 +954,7 @@ dependencies = [
  "bitflags_serde_shim",
  "byteorder",
  "bytes",
+ "consistent_hash_ring",
  "dirty-json",
  "flate2",
  "fnv",

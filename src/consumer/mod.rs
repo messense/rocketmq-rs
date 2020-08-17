@@ -11,9 +11,11 @@ use crate::Error;
 
 mod offset_store;
 mod push;
+mod strategy;
 
 use offset_store::{LocalFileOffsetStore, OffsetStorage, RemoteBrokerOffsetStore};
 pub use push::PushConsumer;
+use strategy::{AllocateAveragely, AllocateStrategy};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MessageModel {
@@ -125,6 +127,7 @@ pub struct Consumer {
     options: ConsumerOptions,
     client: Client<Resolver>,
     storage: OffsetStorage,
+    allocate: AllocateStrategy,
 }
 
 impl Consumer {
@@ -153,6 +156,7 @@ impl Consumer {
             options,
             client,
             storage: offset_store,
+            allocate: AllocateStrategy::Averagely(AllocateAveragely),
         })
     }
 }
