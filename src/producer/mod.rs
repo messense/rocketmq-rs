@@ -497,6 +497,26 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_producer_send_message_compressed() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ProducerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let producer = Producer::with_options(options).unwrap();
+        producer.start();
+        let body = b"test-compressed".to_vec().repeat(1024);
+        let msg = Message::new(
+            "SELF_TEST_TOPIC".to_string(),
+            String::new(),
+            String::new(),
+            0,
+            body,
+            false,
+        );
+        let ret = producer.send(msg).await.unwrap();
+        assert_eq!(ret.status, SendStatus::Ok);
+    }
+
+    #[tokio::test]
     async fn test_producer_send_batch_message_empty() {
         let mut options = ProducerOptions::default();
         options.set_name_server(vec!["localhost:9876".to_string()]);
