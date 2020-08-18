@@ -6,17 +6,23 @@ use crate::Error;
 
 const DEFAULT_NAMESRV_ADDR: &'static str = "http://jmenv.tbsite.net:8080/rocketmq/nsaddr";
 
+/// RocketMQ name server resolver trait
 #[async_trait]
 pub trait NsResolver {
     async fn resolve(&self) -> Result<Vec<String>, Error>;
     fn description(&self) -> &'static str;
 }
 
+/// Pre-defined name server resolvers
 #[derive(Debug, Clone)]
 pub enum Resolver {
+    /// Environment variable resolver
     Env(EnvResolver),
+    /// Static configuration resolver
     Static(StaticResolver),
+    /// Passthrough HTTP resolver
     PassthroughHttp(PassthroughResolver<HttpResolver>),
+    /// HTTP resolver
     Http(HttpResolver),
 }
 
@@ -41,6 +47,7 @@ impl NsResolver for Resolver {
     }
 }
 
+/// Environment variable resolver
 #[derive(Debug, Clone, Copy)]
 pub struct EnvResolver;
 
@@ -57,6 +64,7 @@ impl NsResolver for EnvResolver {
     }
 }
 
+/// Static configuration resolver
 #[derive(Debug, Clone)]
 pub struct StaticResolver {
     addrs: Vec<String>,
@@ -79,6 +87,7 @@ impl NsResolver for StaticResolver {
     }
 }
 
+/// Passthrough HTTP resolver
 #[derive(Debug, Clone)]
 pub struct PassthroughResolver<T: NsResolver> {
     addrs: Vec<String>,
@@ -106,6 +115,7 @@ impl<T: NsResolver + Clone + Send + Sync> NsResolver for PassthroughResolver<T> 
     }
 }
 
+/// HTTP resolver
 #[derive(Debug, Clone)]
 pub struct HttpResolver {
     domain: String,

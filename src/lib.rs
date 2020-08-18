@@ -1,4 +1,5 @@
 mod client;
+/// RocketMQ consumer
 pub mod consumer;
 mod error;
 mod message;

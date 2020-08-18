@@ -11,7 +11,8 @@ use crate::Error;
 
 mod offset_store;
 mod push;
-mod strategy;
+/// Message queue allocation strategy
+pub mod strategy;
 
 use offset_store::{LocalFileOffsetStore, OffsetStorage, RemoteBrokerOffsetStore};
 pub use push::PushConsumer;
@@ -32,6 +33,7 @@ impl fmt::Display for MessageModel {
     }
 }
 
+/// Consume from where
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConsumeFrom {
     LastOffset,

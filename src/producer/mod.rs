@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 
 use crate::client::{Client, ClientOptions, ClientState};
 use crate::error::{ClientError, Error};
-use crate::message::{Message, MessageExt, MessageQueue, MessageSysFlag, Property};
+use crate::message::{Message, MessageQueue, MessageSysFlag, Property};
 use crate::namesrv::NameServer;
 use crate::producer::selector::QueueSelect;
 use crate::protocol::{
@@ -22,29 +22,10 @@ use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
 use selector::QueueSelector;
 
+/// Message queue selector
 pub mod selector;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[repr(i32)]
-pub enum PullStatus {
-    Found = 0,
-    NoNewMsg = 1,
-    NoMsgMatched = 2,
-    OffsetIllegal = 3,
-    BrokerTimeout = 4,
-}
-
-#[derive(Debug, Clone)]
-pub struct PullResult {
-    pub next_begin_offset: i64,
-    pub min_offset: i64,
-    pub max_offset: i64,
-    pub status: PullStatus,
-    pub suggest_which_broker_id: i64,
-    pub message_exts: Vec<MessageExt>,
-    pub body: Vec<u8>,
-}
-
+/// Message send status
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(i32)]
 pub enum SendStatus {
@@ -55,6 +36,7 @@ pub enum SendStatus {
     UnknownError = 4,
 }
 
+/// Message send result
 #[derive(Debug, Clone)]
 pub struct SendResult {
     pub status: SendStatus,
@@ -67,6 +49,7 @@ pub struct SendResult {
     pub trace_on: bool,
 }
 
+/// RocketMQ producer options
 #[derive(Debug, Clone)]
 pub struct ProducerOptions {
     client_options: ClientOptions,
