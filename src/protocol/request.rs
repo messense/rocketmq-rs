@@ -358,3 +358,16 @@ impl EncodeRequestHeader for UpdateConsumerOffsetRequestHeader {
         map
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct GetConsumerListRequestHeader {
+    pub consumer_group: String,
+}
+
+impl EncodeRequestHeader for GetConsumerListRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("consumerGroup".to_string(), self.consumer_group);
+        map
+    }
+}

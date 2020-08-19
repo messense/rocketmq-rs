@@ -3,10 +3,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
+use tracing::error;
 
 use crate::client::{Client, ClientOptions};
 use crate::namesrv::NameServer;
-use crate::resolver::{HttpResolver, Resolver};
+use crate::protocol::{request::GetConsumerListRequestHeader, RemotingCommand, RequestCode};
+use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::Error;
 
 mod offset_store;
@@ -81,6 +83,29 @@ impl Default for ConsumerOptions {
     }
 }
 
+impl ConsumerOptions {
+    pub fn set_resolver(&mut self, resolver: Resolver) -> &mut Self {
+        self.resolver = resolver;
+        self
+    }
+
+    pub fn set_name_server(&mut self, addrs: Vec<String>) -> &mut Self {
+        self.resolver = Resolver::PassthroughHttp(PassthroughResolver::new(
+            addrs,
+            HttpResolver::new("DEFAULT".to_string()),
+        ));
+        self
+    }
+
+    pub fn set_name_server_domain(&mut self, url: &str) -> &mut Self {
+        self.resolver = Resolver::Http(HttpResolver::with_domain(
+            "DEFAULT".to_string(),
+            url.to_string(),
+        ));
+        self
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConsumeResult {
     Success,
@@ -125,6 +150,7 @@ impl ConsumerInner {
 
 #[derive(Debug)]
 pub struct Consumer {
+    consumer_group: String,
     inner: Arc<Mutex<ConsumerInner>>,
     options: ConsumerOptions,
     client: Client<Resolver>,
@@ -154,6 +180,7 @@ impl Consumer {
             }
         };
         Ok(Self {
+            consumer_group: consumer_group.clone(),
             inner,
             options,
             client,
@@ -169,10 +196,70 @@ impl Consumer {
     pub fn shutdown(&self) {
         self.client.shutdown();
     }
+
+    pub async fn get_consumer_list(&self, topic: &str) -> Result<Vec<String>, Error> {
+        let broker_addr = match self.client.name_server.find_broker_addr_by_topic(topic) {
+            Some(addr) => addr,
+            None => {
+                self.client
+                    .name_server
+                    .update_topic_route_info(topic)
+                    .await?;
+                match self.client.name_server.find_broker_addr_by_topic(topic) {
+                    Some(addr) => addr,
+                    None => return Err(Error::EmptyRouteData),
+                }
+            }
+        };
+        let header = GetConsumerListRequestHeader {
+            consumer_group: self.consumer_group.clone(),
+        };
+        let cmd =
+            RemotingCommand::with_header(RequestCode::GetConsumerListByGroup, header, Vec::new());
+        match self.client.invoke(&broker_addr, cmd).await {
+            Ok(res) => {
+                if res.body.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let result: serde_json::Value = serde_json::from_slice(&res.body)?;
+                if let Some(list) = result
+                    .get("consumerIdList")
+                    .and_then(|list| list.as_array())
+                {
+                    let consumers: Vec<String> = list
+                        .iter()
+                        .map(|v| v.as_str().map(ToString::to_string).unwrap())
+                        .collect();
+                    Ok(consumers)
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+            Err(err) => {
+                error!(consumer_group = %self.consumer_group, broker = %broker_addr, "get consumer list of group from broker error: {:?}", err);
+                Err(err)
+            }
+        }
+    }
 }
 
 impl Drop for Consumer {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Consumer, ConsumerOptions};
+
+    #[tokio::test]
+    async fn test_get_consumer_list() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ConsumerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let consumer = Consumer::with_options(options).unwrap();
+        let consumer_list = consumer.get_consumer_list("SELF_TEST_TOPIC").await.unwrap();
+        assert!(consumer_list.is_empty());
     }
 }
