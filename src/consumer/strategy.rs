@@ -77,6 +77,9 @@ impl AllocateAveragely {
             } else {
                 index * avg_size + modulo
             };
+            if mq_size < start_index {
+                return Vec::new();
+            }
             let num = std::cmp::min(avg_size, mq_size - start_index);
             let mut mqs = Vec::with_capacity(num);
             for i in 0..num {
@@ -247,5 +250,166 @@ impl AllocateConsistentHash {
             warn!(consumer_group = consumer_group, consumer_id = current_cid, cid_all = ?cid_all, "consumer id not in cid_all");
             Vec::new()
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::message::MessageQueue;
+
+    #[test]
+    fn test_allocate_averagely() {
+        let mqs = vec![
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 0,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 1,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 2,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 3,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 4,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 5,
+            },
+        ];
+        let strategy = AllocateAveragely;
+        // invalid input cases
+        assert!(strategy
+            .allocate("testGroup", "", &mqs, &["192.168.24.1@default"])
+            .is_empty());
+        assert!(strategy
+            .allocate("testGroup", "", &[], &["192.168.24.1@default"])
+            .is_empty());
+        assert!(strategy.allocate("testGroup", "", &mqs, &[]).is_empty());
+        // valid input cases
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.1@default",
+                &mqs,
+                &["192.168.24.1@default", "192.168.24.2@default"]
+            ),
+            vec![
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 0
+                },
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 1
+                },
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 2
+                },
+            ]
+        );
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.2@default",
+                &mqs,
+                &[
+                    "192.168.24.1@default",
+                    "192.168.24.2@default",
+                    "192.168.24.3@default"
+                ]
+            ),
+            vec![
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 2
+                },
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 3
+                },
+            ]
+        );
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.2@default",
+                &mqs,
+                &[
+                    "192.168.24.1@default",
+                    "192.168.24.2@default",
+                    "192.168.24.3@default",
+                    "192.168.24.4@default"
+                ]
+            ),
+            vec![
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 2
+                },
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 3
+                },
+            ]
+        );
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.4@default",
+                &mqs,
+                &[
+                    "192.168.24.1@default",
+                    "192.168.24.2@default",
+                    "192.168.24.3@default",
+                    "192.168.24.4@default"
+                ]
+            ),
+            vec![MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 5
+            },]
+        );
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.7@default",
+                &mqs,
+                &[
+                    "192.168.24.1@default",
+                    "192.168.24.2@default",
+                    "192.168.24.3@default",
+                    "192.168.24.4@default",
+                    "192.168.24.5@default",
+                    "192.168.24.6@default",
+                    "192.168.24.7@default"
+                ]
+            ),
+            Vec::new()
+        );
     }
 }
