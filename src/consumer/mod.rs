@@ -6,8 +6,12 @@ use parking_lot::Mutex;
 use tracing::error;
 
 use crate::client::{Client, ClientOptions};
+use crate::message::MessageQueue;
 use crate::namesrv::NameServer;
-use crate::protocol::{request::GetConsumerListRequestHeader, RemotingCommand, RequestCode};
+use crate::protocol::{
+    request::{GetConsumerListRequestHeader, GetMaxOffsetRequestHeader},
+    RemotingCommand, RequestCode, ResponseCode,
+};
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::Error;
 
@@ -197,20 +201,24 @@ impl Consumer {
         self.client.shutdown();
     }
 
-    pub async fn get_consumer_list(&self, topic: &str) -> Result<Vec<String>, Error> {
-        let broker_addr = match self.client.name_server.find_broker_addr_by_topic(topic) {
-            Some(addr) => addr,
+    async fn get_broker_addr(&self, topic: &str) -> Result<String, Error> {
+        match self.client.name_server.find_broker_addr_by_topic(topic) {
+            Some(addr) => Ok(addr),
             None => {
                 self.client
                     .name_server
                     .update_topic_route_info(topic)
                     .await?;
                 match self.client.name_server.find_broker_addr_by_topic(topic) {
-                    Some(addr) => addr,
-                    None => return Err(Error::EmptyRouteData),
+                    Some(addr) => Ok(addr),
+                    None => Err(Error::EmptyRouteData),
                 }
             }
-        };
+        }
+    }
+
+    pub async fn get_consumer_list(&self, topic: &str) -> Result<Vec<String>, Error> {
+        let broker_addr = self.get_broker_addr(topic).await?;
         let header = GetConsumerListRequestHeader {
             consumer_group: self.consumer_group.clone(),
         };
@@ -241,6 +249,30 @@ impl Consumer {
             }
         }
     }
+
+    pub async fn get_max_offset(&self, mq: &MessageQueue) -> Result<i64, Error> {
+        let broker_addr = self.get_broker_addr(&mq.topic).await?;
+        let header = GetMaxOffsetRequestHeader {
+            topic: mq.topic.clone(),
+            queue_id: mq.queue_id,
+        };
+        let cmd = RemotingCommand::with_header(RequestCode::GetMaxOffset, header, Vec::new());
+        let res = self.client.invoke(&broker_addr, cmd).await?;
+        if res.code() == ResponseCode::Success {
+            let offset: i64 = res
+                .header
+                .ext_fields
+                .get("offset")
+                .and_then(|s| s.parse().ok())
+                .unwrap();
+            Ok(offset)
+        } else {
+            Err(Error::ResponseError {
+                code: res.code(),
+                message: res.header.remark,
+            })
+        }
+    }
 }
 
 impl Drop for Consumer {
@@ -252,6 +284,7 @@ impl Drop for Consumer {
 #[cfg(test)]
 mod test {
     use super::{Consumer, ConsumerOptions};
+    use crate::message::MessageQueue;
 
     #[tokio::test]
     async fn test_get_consumer_list() {
@@ -261,5 +294,20 @@ mod test {
         let consumer = Consumer::with_options(options).unwrap();
         let consumer_list = consumer.get_consumer_list("SELF_TEST_TOPIC").await.unwrap();
         assert!(consumer_list.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_max_offset() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ConsumerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let consumer = Consumer::with_options(options).unwrap();
+        let mq = MessageQueue {
+            topic: "SELF_TEST_TOPIC".to_string(),
+            broker_name: String::new(),
+            queue_id: 0,
+        };
+        let offset = consumer.get_max_offset(&mq).await.unwrap();
+        assert!(offset >= 0);
     }
 }

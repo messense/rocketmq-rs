@@ -371,3 +371,18 @@ impl EncodeRequestHeader for GetConsumerListRequestHeader {
         map
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct GetMaxOffsetRequestHeader {
+    pub topic: String,
+    pub queue_id: u32,
+}
+
+impl EncodeRequestHeader for GetMaxOffsetRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("topic".to_string(), self.topic);
+        map.insert("queueId".to_string(), self.queue_id.to_string());
+        map
+    }
+}
