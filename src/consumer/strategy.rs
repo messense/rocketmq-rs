@@ -567,4 +567,30 @@ mod test {
             Vec::new()
         );
     }
+
+    #[test]
+    fn test_allocate_by_config() {
+        let mqs = vec![
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 0,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 1,
+            },
+        ];
+        let strategy = AllocateByConfig::new(mqs.clone());
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.1@default",
+                &mqs,
+                &["192.168.24.1@default", "192.168.24.2@default"]
+            ),
+            mqs
+        );
+    }
 }
