@@ -28,7 +28,7 @@ impl fmt::Display for MessageModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MessageModel::BroadCasting => write!(f, "BroadCasting"),
-            MessageModel::Clustering => write!(f, "Clustring"),
+            MessageModel::Clustering => write!(f, "Clustering"),
         }
     }
 }
@@ -160,5 +160,19 @@ impl Consumer {
             storage: offset_store,
             allocate: AllocateStrategy::Averagely(AllocateAveragely),
         })
+    }
+
+    pub fn start(&self) {
+        self.client.start();
+    }
+
+    pub fn shutdown(&self) {
+        self.client.shutdown();
+    }
+}
+
+impl Drop for Consumer {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
