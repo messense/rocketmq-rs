@@ -412,4 +412,159 @@ mod test {
             Vec::new()
         );
     }
+
+    #[test]
+    fn test_allocate_averagely_circle() {
+        let mqs = vec![
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 0,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 1,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 2,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 3,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 4,
+            },
+            MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 5,
+            },
+        ];
+        let strategy = AllocateAveragelyByCircle;
+        // invalid input cases
+        assert!(strategy
+            .allocate("testGroup", "", &mqs, &["192.168.24.1@default"])
+            .is_empty());
+        assert!(strategy
+            .allocate("testGroup", "", &[], &["192.168.24.1@default"])
+            .is_empty());
+        assert!(strategy.allocate("testGroup", "", &mqs, &[]).is_empty());
+        // valid input cases
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.1@default",
+                &mqs,
+                &["192.168.24.1@default", "192.168.24.2@default"]
+            ),
+            vec![
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 0
+                },
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 2
+                },
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 4
+                },
+            ]
+        );
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.2@default",
+                &mqs,
+                &[
+                    "192.168.24.1@default",
+                    "192.168.24.2@default",
+                    "192.168.24.3@default"
+                ]
+            ),
+            vec![
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 1
+                },
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 4
+                },
+            ]
+        );
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.2@default",
+                &mqs,
+                &[
+                    "192.168.24.1@default",
+                    "192.168.24.2@default",
+                    "192.168.24.3@default",
+                    "192.168.24.4@default"
+                ]
+            ),
+            vec![
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 1
+                },
+                MessageQueue {
+                    topic: "".to_string(),
+                    broker_name: "".to_string(),
+                    queue_id: 5
+                },
+            ]
+        );
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.4@default",
+                &mqs,
+                &[
+                    "192.168.24.1@default",
+                    "192.168.24.2@default",
+                    "192.168.24.3@default",
+                    "192.168.24.4@default"
+                ]
+            ),
+            vec![MessageQueue {
+                topic: "".to_string(),
+                broker_name: "".to_string(),
+                queue_id: 3
+            },]
+        );
+        assert_eq!(
+            strategy.allocate(
+                "testGroup",
+                "192.168.24.7@default",
+                &mqs,
+                &[
+                    "192.168.24.1@default",
+                    "192.168.24.2@default",
+                    "192.168.24.3@default",
+                    "192.168.24.4@default",
+                    "192.168.24.5@default",
+                    "192.168.24.6@default",
+                    "192.168.24.7@default"
+                ]
+            ),
+            Vec::new()
+        );
+    }
 }
