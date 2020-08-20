@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -16,11 +17,13 @@ use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::Error;
 
 mod offset_store;
+mod process_queue;
 mod push;
 /// Message queue allocation strategy
 pub mod strategy;
 
 use offset_store::{LocalFileOffsetStore, OffsetStorage, RemoteBrokerOffsetStore};
+use process_queue::ProcessQueue;
 pub use push::PushConsumer;
 use strategy::{AllocateAveragely, AllocateStrategy};
 
@@ -160,6 +163,7 @@ pub struct Consumer {
     client: Client<Resolver>,
     storage: OffsetStorage,
     allocate: AllocateStrategy,
+    process_queue_map: HashMap<MessageQueue, ProcessQueue>,
 }
 
 impl Consumer {
@@ -190,6 +194,7 @@ impl Consumer {
             client,
             storage: offset_store,
             allocate: AllocateStrategy::Averagely(AllocateAveragely),
+            process_queue_map: HashMap::new(),
         })
     }
 
