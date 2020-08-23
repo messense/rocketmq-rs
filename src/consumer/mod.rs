@@ -10,7 +10,7 @@ use crate::client::{Client, ClientOptions};
 use crate::message::MessageQueue;
 use crate::namesrv::NameServer;
 use crate::protocol::{
-    request::{GetConsumerListRequestHeader, GetMaxOffsetRequestHeader},
+    request::{GetConsumerListRequestHeader, GetMaxOffsetRequestHeader, SearchOffsetByTimestampRequestHeader},
     RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
@@ -278,6 +278,31 @@ impl Consumer {
             })
         }
     }
+
+    pub async fn search_offset_by_timestamp(&self, mq: &MessageQueue, timestamp: i64) -> Result<i64, Error> {
+        let broker_addr = self.get_broker_addr(&mq.topic).await?;
+        let header = SearchOffsetByTimestampRequestHeader {
+            topic: mq.topic.clone(),
+            queue_id: mq.queue_id,
+            timestamp,
+        };
+        let cmd = RemotingCommand::with_header(RequestCode::SearchOffsetByTimestamp, header, Vec::new());
+        let res = self.client.invoke(&broker_addr, cmd).await?;
+        if res.code() == ResponseCode::Success {
+            let offset: i64 = res
+                .header
+                .ext_fields
+                .get("offset")
+                .and_then(|s| s.parse().ok())
+                .unwrap();
+            Ok(offset)
+        } else {
+            Err(Error::ResponseError {
+                code: res.code(),
+                message: res.header.remark,
+            })
+        }
+    }
 }
 
 impl Drop for Consumer {
@@ -313,6 +338,21 @@ mod test {
             queue_id: 0,
         };
         let offset = consumer.get_max_offset(&mq).await.unwrap();
+        assert!(offset >= 0);
+    }
+
+    #[tokio::test]
+    async fn test_search_offset_by_timestamp() {
+        // tracing_subscriber::fmt::init();
+        let mut options = ConsumerOptions::default();
+        options.set_name_server(vec!["localhost:9876".to_string()]);
+        let consumer = Consumer::with_options(options).unwrap();
+        let mq = MessageQueue {
+            topic: "SELF_TEST_TOPIC".to_string(),
+            broker_name: String::new(),
+            queue_id: 0,
+        };
+        let offset = consumer.search_offset_by_timestamp(&mq, 0).await.unwrap();
         assert!(offset >= 0);
     }
 }

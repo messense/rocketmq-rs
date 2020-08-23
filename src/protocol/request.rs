@@ -386,3 +386,20 @@ impl EncodeRequestHeader for GetMaxOffsetRequestHeader {
         map
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct SearchOffsetByTimestampRequestHeader {
+    pub topic: String,
+    pub queue_id: u32,
+    pub timestamp: i64,
+}
+
+impl EncodeRequestHeader for SearchOffsetByTimestampRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("topic".to_string(), self.topic);
+        map.insert("queueId".to_string(), self.queue_id.to_string());
+        map.insert("timestamp".to_string(), self.timestamp.to_string());
+        map
+    }
+}
