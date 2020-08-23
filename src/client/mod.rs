@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::io;
 use std::net::IpAddr;
 use std::process;
 use std::sync::{
@@ -283,6 +284,18 @@ where
     #[inline]
     pub async fn invoke(&self, addr: &str, cmd: RemotingCommand) -> Result<RemotingCommand, Error> {
         Ok(self.remote_client.invoke(addr, cmd).await?)
+    }
+
+    #[inline]
+    pub async fn invoke_timeout(
+        &self,
+        addr: &str,
+        cmd: RemotingCommand,
+        timeout: time::Duration,
+    ) -> Result<RemotingCommand, Error> {
+        time::timeout(timeout, self.remote_client.invoke(addr, cmd))
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::TimedOut, e))?
     }
 
     #[inline]

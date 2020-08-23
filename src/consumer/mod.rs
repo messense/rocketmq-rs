@@ -10,7 +10,10 @@ use crate::client::{Client, ClientOptions};
 use crate::message::MessageQueue;
 use crate::namesrv::NameServer;
 use crate::protocol::{
-    request::{GetConsumerListRequestHeader, GetMaxOffsetRequestHeader, SearchOffsetByTimestampRequestHeader},
+    request::{
+        GetConsumerListRequestHeader, GetMaxOffsetRequestHeader,
+        SearchOffsetByTimestampRequestHeader,
+    },
     RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
@@ -229,7 +232,11 @@ impl Consumer {
         };
         let cmd =
             RemotingCommand::with_header(RequestCode::GetConsumerListByGroup, header, Vec::new());
-        match self.client.invoke(&broker_addr, cmd).await {
+        match self
+            .client
+            .invoke_timeout(&broker_addr, cmd, Duration::from_secs(3))
+            .await
+        {
             Ok(res) => {
                 if res.body.is_empty() {
                     return Ok(Vec::new());
@@ -262,7 +269,10 @@ impl Consumer {
             queue_id: mq.queue_id,
         };
         let cmd = RemotingCommand::with_header(RequestCode::GetMaxOffset, header, Vec::new());
-        let res = self.client.invoke(&broker_addr, cmd).await?;
+        let res = self
+            .client
+            .invoke_timeout(&broker_addr, cmd, Duration::from_secs(3))
+            .await?;
         if res.code() == ResponseCode::Success {
             let offset: i64 = res
                 .header
@@ -279,15 +289,23 @@ impl Consumer {
         }
     }
 
-    pub async fn search_offset_by_timestamp(&self, mq: &MessageQueue, timestamp: i64) -> Result<i64, Error> {
+    pub async fn search_offset_by_timestamp(
+        &self,
+        mq: &MessageQueue,
+        timestamp: i64,
+    ) -> Result<i64, Error> {
         let broker_addr = self.get_broker_addr(&mq.topic).await?;
         let header = SearchOffsetByTimestampRequestHeader {
             topic: mq.topic.clone(),
             queue_id: mq.queue_id,
             timestamp,
         };
-        let cmd = RemotingCommand::with_header(RequestCode::SearchOffsetByTimestamp, header, Vec::new());
-        let res = self.client.invoke(&broker_addr, cmd).await?;
+        let cmd =
+            RemotingCommand::with_header(RequestCode::SearchOffsetByTimestamp, header, Vec::new());
+        let res = self
+            .client
+            .invoke_timeout(&broker_addr, cmd, Duration::from_secs(3))
+            .await?;
         if res.code() == ResponseCode::Success {
             let offset: i64 = res
                 .header
