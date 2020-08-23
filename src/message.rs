@@ -233,7 +233,7 @@ impl Message {
 
 #[derive(Debug, Clone)]
 pub struct MessageExt {
-    message: Message,
+    pub(crate) message: Message,
     queue_id: i32,
     store_size: i32,
     queue_offset: i64,
@@ -242,8 +242,8 @@ pub struct MessageExt {
     born_timestamp: i64,
     store_host: SocketAddrV4,
     store_timestamp: i64,
-    msg_id: String,
-    commit_log_offset: i64,
+    pub(crate) msg_id: String,
+    pub(crate) commit_log_offset: i64,
     body_crc: i32,
     reconsume_times: i32,
     prepared_transaction_offset: i64,

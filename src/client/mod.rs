@@ -20,7 +20,10 @@ use crate::message::MessageExt;
 use crate::namesrv::NameServer;
 use crate::producer::ProducerInner;
 use crate::protocol::{
-    request::{CreateTopicRequestHeader, PullMessageRequestHeader, UnregisterClientRequestHeader},
+    request::{
+        ConsumerSendMsgBackRequestHeader, CreateTopicRequestHeader, PullMessageRequestHeader,
+        UnregisterClientRequestHeader,
+    },
     RemotingCommand, RequestCode, ResponseCode,
 };
 use crate::remoting::RemotingClient;
@@ -581,6 +584,35 @@ where
             }
         }
         Ok(())
+    }
+
+    pub async fn send_message_back(
+        &self,
+        broker_addr: &str,
+        msg: &MessageExt,
+        delay_level: i32,
+        max_reconsume_times: i32,
+    ) -> Result<(), Error> {
+        let header = ConsumerSendMsgBackRequestHeader {
+            offset: msg.commit_log_offset,
+            group: self.options.group_name.clone(),
+            delay_level,
+            origin_msg_id: msg.msg_id.clone(),
+            origin_topic: msg.message.topic.clone(),
+            unit_mode: self.options.unit_mode,
+            max_reconsume_times,
+        };
+        let cmd =
+            RemotingCommand::with_header(RequestCode::ConsumerSendMsgBack, header, Vec::new());
+        let res = self.remote_client.invoke(broker_addr, cmd).await?;
+        if res.code() == ResponseCode::Success {
+            Ok(())
+        } else {
+            Err(Error::ResponseError {
+                code: res.code(),
+                message: res.header.remark,
+            })
+        }
     }
 }
 

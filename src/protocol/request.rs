@@ -403,3 +403,37 @@ impl EncodeRequestHeader for SearchOffsetByTimestampRequestHeader {
         map
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct ConsumerSendMsgBackRequestHeader {
+    pub offset: i64,
+    pub group: String,
+    pub delay_level: i32,
+    pub origin_msg_id: String,
+    pub origin_topic: String,
+    pub unit_mode: bool,
+    pub max_reconsume_times: i32,
+}
+
+impl EncodeRequestHeader for ConsumerSendMsgBackRequestHeader {
+    fn encode(self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("offset".to_string(), self.offset.to_string());
+        map.insert("group".to_string(), self.group);
+        map.insert("delayLevel".to_string(), self.delay_level.to_string());
+        map.insert("unitMode".to_string(), self.unit_mode.to_string());
+        if !self.origin_msg_id.is_empty() {
+            map.insert("originMsgId".to_string(), self.origin_msg_id);
+        }
+        if !self.origin_topic.is_empty() {
+            map.insert("originTopic".to_string(), self.origin_topic);
+        }
+        if self.max_reconsume_times != -1 {
+            map.insert(
+                "maxReconsumeTimes".to_string(),
+                self.max_reconsume_times.to_string(),
+            );
+        }
+        map
+    }
+}
