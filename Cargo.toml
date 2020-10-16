@@ -16,11 +16,11 @@ serde = { version = "1.0", features = ["derive"] }
 flate2 = "1.0"
 hex = "0.4.2"
 rand = "0.7.3"
-tokio = { version = "0.2", features = ["tcp", "dns", "io-util", "time", "macros", "fs"] }
+tokio = { version = "0.3.0", features = ["net", "io-util", "time", "macros", "fs", "rt", "sync"] }
 num_enum = "0.5.1"
 reqwest = { version = "0.10.7", default-features = false, features = ["blocking"] }
 futures = "0.3.5"
-tokio-util = "0.3.1"
+tokio-util = { version = "0.4.0", features = ["codec"] }
 bytes = "0.5.6"
 bitflags = "1.2.1"
 dirty-json = "0.1.0"
