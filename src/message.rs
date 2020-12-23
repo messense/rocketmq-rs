@@ -403,19 +403,19 @@ impl UniqueIdGenerator {
                 Time::try_from_hms(0, 0, 0).unwrap(),
             )
             .assume_offset(now.offset())
-            .timestamp();
+            .unix_timestamp();
             self.next_timestamp = (PrimitiveDateTime::new(
                 Date::try_from_ymd(year, month, 1).unwrap(),
                 Time::try_from_hms(0, 0, 0).unwrap(),
             )
             .assume_offset(now.offset())
                 + time::Duration::days(30))
-            .timestamp();
+            .unix_timestamp();
         }
         self.counter += self.counter.wrapping_add(1);
         let mut buf = Vec::new();
         buf.write_i32::<BigEndian>(
-            ((OffsetDateTime::now_local().timestamp() - self.start_timestamp) * 1000) as i32,
+            ((OffsetDateTime::now_local().unix_timestamp() - self.start_timestamp) * 1000) as i32,
         )
         .unwrap();
         buf.write_i16::<BigEndian>(self.counter).unwrap();
