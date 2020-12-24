@@ -119,7 +119,7 @@ impl<S: Stream<Item = Result<RemotingCommand, Error>>> Future for Receiver<S> {
             Poll::Pending => {}
         }
         loop {
-            match self.registrations.as_mut().poll_next(ctx) {
+            match self.registrations.as_mut().poll_recv(ctx) {
                 Poll::Ready(Some((opaque, resolver))) => {
                     self.pending_requests.insert(opaque, resolver);
                 }
@@ -197,7 +197,7 @@ impl Connection {
             receiver_shutdown_rx,
         )));
         tokio::spawn(Box::pin(async move {
-            while let Some(msg) = rx.next().await {
+            while let Some(msg) = rx.recv().await {
                 if let Err(_e) = sink.send(msg).await {
                     // FIXME: error handling
                     break;
