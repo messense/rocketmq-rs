@@ -42,4 +42,4 @@ consistent_hash_ring = "0.8.0"
 tracing-subscriber = "0.2.11"
 
 [patch.crates-io]
-reqwest = { git = "https://github.com/messense/reqwest.git", branch = "tokio-0-3" }
+reqwest = { git = "https://github.com/seanmonstar/reqwest.git" }
