@@ -53,8 +53,11 @@ jobs:
       - name: Cache cargo build
         uses: actions/cache@v1
         with:
-          path: target
-          key: ${{ runner.os }}-${{ matrix.toolchain }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.toolchain }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/cargo@v1
         if: matrix.toolchain == 'stable'
         with:
