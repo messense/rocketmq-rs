@@ -166,7 +166,7 @@ impl RemotingClient {
     }
 
     fn calculate_signature(data: &[u8], key: &[u8]) -> String {
-        let mut mac = HmacSha1::new_varkey(key).unwrap();
+        let mut mac = HmacSha1::new_from_slice(key).unwrap();
         mac.update(data);
         let result = mac.finalize().into_bytes();
         base64::encode(&result)
