@@ -45,6 +45,16 @@ jobs:
           profile: minimal
           toolchain: ${{ matrix.toolchain }}
           override: true
+      - name: Use gnu-tar on macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install gnu-tar
+          echo "/usr/local/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.toolchain }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/cargo@v1
         if: matrix.toolchain == 'stable'
         with:
