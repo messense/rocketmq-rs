@@ -2,7 +2,7 @@ mod client;
 /// RocketMQ consumer
 pub mod consumer;
 mod error;
-mod message;
+pub mod message;
 mod namesrv;
 mod permission;
 /// RocketMQ producer
@@ -16,4 +16,5 @@ mod utils;
 
 pub use consumer::{ConsumerOptions, PushConsumer};
 pub use error::Error;
+pub use message::Message;
 pub use producer::{Producer, ProducerOptions};
