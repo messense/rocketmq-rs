@@ -29,9 +29,9 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install RocketMQ
         run: |
-            wget -q https://archive.apache.org/dist/rocketmq/4.6.0/rocketmq-all-4.6.0-bin-release.zip
-            unzip -q rocketmq-all-4.6.0-bin-release.zip
-            cd rocketmq-all-4.6.0-bin-release
+            wget -q https://archive.apache.org/dist/rocketmq/4.9.0/rocketmq-all-4.9.0-bin-release.zip
+            unzip -q rocketmq-all-4.9.0-bin-release.zip
+            cd rocketmq-all-4.9.0-bin-release
             perl -i -pe's/-Xms8g -Xmx8g -Xmn4g/-Xms2g -Xmx2g -Xmn1g/g' bin/runbroker.sh
             nohup sh bin/mqnamesrv &
             nohup sh bin/mqbroker -n localhost:9876 &
