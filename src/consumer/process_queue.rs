@@ -20,7 +20,7 @@ pub struct ProcessQueue {
 
 impl ProcessQueue {
     pub fn new() -> Self {
-        let ts = OffsetDateTime::now_local().unix_timestamp();
+        let ts = OffsetDateTime::now_utc().unix_timestamp();
         Self {
             msg_count: AtomicUsize::new(0),
             msg_size: AtomicUsize::new(0),

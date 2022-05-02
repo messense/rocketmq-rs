@@ -20,6 +20,7 @@ use crate::protocol::{
 };
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
+use crate::Error::TopicNotExist;
 use selector::QueueSelector;
 
 /// Message queue selector
@@ -308,7 +309,7 @@ impl Producer {
                 topic: mq.topic.clone(),
                 queue_id: mq.queue_id,
                 sys_flag,
-                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::unix_epoch())
+                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::UNIX_EPOCH)
                     .whole_milliseconds() as i64,
                 flag: msg.flag,
                 properties: msg.dump_properties(),
@@ -326,7 +327,7 @@ impl Producer {
                 topic: mq.topic.clone(),
                 queue_id: mq.queue_id,
                 sys_flag,
-                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::unix_epoch())
+                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::UNIX_EPOCH)
                     .whole_milliseconds() as i64,
                 flag: msg.flag,
                 properties: msg.dump_properties(),
@@ -356,7 +357,7 @@ impl Producer {
                 return Err(Error::ResponseError {
                     code: cmd.code(),
                     message: cmd.header.remark,
-                })
+                });
             }
         };
         let uniq_msg_id = msgs
@@ -397,21 +398,26 @@ impl Producer {
 
     async fn select_message_queue(&self, msg: &Message) -> Result<Option<MessageQueue>, Error> {
         let topic = msg.topic();
+        //fetch in local cache
         let info = self.inner.lock().publish_info.get(topic).cloned();
         let info = if info.is_some() {
             info
         } else {
-            let (route_data, changed) = self
-                .client
-                .name_server
-                .update_topic_route_info(topic)
-                .await?;
-            self.client.update_publish_info(topic, route_data, changed);
-            self.inner.lock().publish_info.get(topic).cloned()
+            // local cache is not exist, fetch from remote NameServer
+            let route_info_wrapper = self.client.name_server.update_topic_route_info(topic).await;
+            match route_info_wrapper {
+                Ok((route_data, changed)) => {
+                    self.client.update_publish_info(topic, route_data, changed);
+                    self.inner.lock().publish_info.get(topic).cloned()
+                }
+                Err(TopicNotExist(_)) => None,
+                Err(e) => return Err(e),
+            }
         };
         let info = if info.is_some() {
             info
         } else {
+            // remote NameServer is also not exist, use default topic
             let (route_data, changed) = self
                 .client
                 .name_server

@@ -70,12 +70,12 @@ impl Property {
 #[derive(Debug, Clone, Copy, PartialEq, IntoPrimitive, TryFromPrimitive)]
 #[repr(i32)]
 pub enum MessageSysFlag {
-    Compressed = 0x1,
-    MultiTags = 0x1 << 1,
     TransactionNotType = 0,
-    TransactionPreparedType = 0x1 << 2,
-    TransactionCommitType = 0x2 << 2,
-    TransactionRollbackType = 0x3 << 2,
+    Compressed = 0x1,
+    MultiTags = 0x2,
+    TransactionPreparedType = 0x4,
+    TransactionCommitType = 0x8,
+    TransactionRollbackType = 0x12,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -395,27 +395,27 @@ impl UniqueIdGenerator {
             > self.next_timestamp
         {
             // update timestamp
-            let now = OffsetDateTime::now_local();
+            let now = OffsetDateTime::now_utc();
             let year = now.year();
             let month = now.month();
             self.start_timestamp = PrimitiveDateTime::new(
-                Date::try_from_ymd(year, month, 1).unwrap(),
-                Time::try_from_hms(0, 0, 0).unwrap(),
+                Date::from_calendar_date(year, month, 1).unwrap(),
+                Time::from_hms(0, 0, 0).unwrap(),
             )
             .assume_offset(now.offset())
             .unix_timestamp();
             self.next_timestamp = (PrimitiveDateTime::new(
-                Date::try_from_ymd(year, month, 1).unwrap(),
-                Time::try_from_hms(0, 0, 0).unwrap(),
+                Date::from_calendar_date(year, month, 1).unwrap(),
+                Time::from_hms(0, 0, 0).unwrap(),
             )
             .assume_offset(now.offset())
                 + time::Duration::days(30))
             .unix_timestamp();
         }
-        self.counter += self.counter.wrapping_add(1);
+        self.counter = self.counter.wrapping_add(1);
         let mut buf = Vec::new();
         buf.write_i32::<BigEndian>(
-            ((OffsetDateTime::now_local().unix_timestamp() - self.start_timestamp) * 1000) as i32,
+            ((OffsetDateTime::now_utc().unix_timestamp() - self.start_timestamp) * 1000) as i32,
         )
         .unwrap();
         buf.write_i16::<BigEndian>(self.counter).unwrap();
@@ -459,5 +459,14 @@ mod test {
         assert_eq!("123", &msg.message.properties["a"]);
         assert_eq!("hello", &msg.message.properties["b"]);
         assert_eq!("3.14", &msg.message.properties["c"]);
+    }
+
+    #[test]
+    fn text_generate_uniq_id() {
+        use super::UNIQ_ID_GENERATOR;
+        for i in 0..100 {
+            let uid = UNIQ_ID_GENERATOR.lock().generate();
+            println!("i: {}, uid: {}", i, uid);
+        }
     }
 }

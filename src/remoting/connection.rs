@@ -83,7 +83,7 @@ struct Receiver<S: Stream<Item = Result<RemotingCommand, Error>>> {
     addr: String,
     inbound: Pin<Box<S>>,
     // internal sender
-    outbound: mpsc::UnboundedSender<RemotingCommand>,
+    // outbound: mpsc::UnboundedSender<RemotingCommand>,
     pending_requests: HashMap<i32, oneshot::Sender<RemotingCommand>>,
     registrations: Pin<Box<mpsc::UnboundedReceiver<(i32, oneshot::Sender<RemotingCommand>)>>>,
     shutdown: Pin<Box<oneshot::Receiver<()>>>,
@@ -93,14 +93,14 @@ impl<S: Stream<Item = Result<RemotingCommand, Error>>> Receiver<S> {
     pub fn new(
         addr: String,
         inbound: S,
-        outbound: mpsc::UnboundedSender<RemotingCommand>,
+        // outbound: mpsc::UnboundedSender<RemotingCommand>,
         registrations: mpsc::UnboundedReceiver<(i32, oneshot::Sender<RemotingCommand>)>,
         shutdown: oneshot::Receiver<()>,
     ) -> Receiver<S> {
         Self {
             addr,
             inbound: Box::pin(inbound),
-            outbound,
+            // outbound,
             pending_requests: HashMap::new(),
             registrations: Box::pin(registrations),
             shutdown: Box::pin(shutdown),
@@ -186,13 +186,16 @@ impl Connection {
         S: Send + std::marker::Unpin + 'static,
     {
         let (mut sink, stream) = stream.split();
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (tx, mut rx): (
+            mpsc::UnboundedSender<RemotingCommand>,
+            mpsc::UnboundedReceiver<RemotingCommand>,
+        ) = mpsc::unbounded_channel();
         let (registrations_tx, registrations_rx) = mpsc::unbounded_channel();
         let (receiver_shutdown_tx, receiver_shutdown_rx) = oneshot::channel();
         tokio::spawn(Box::pin(Receiver::new(
             addr.clone(),
             stream,
-            tx.clone(),
+            // tx.clone(),
             registrations_rx,
             receiver_shutdown_rx,
         )));
