@@ -186,7 +186,10 @@ impl Connection {
         S: Send + std::marker::Unpin + 'static,
     {
         let (mut sink, stream) = stream.split();
-        let (tx, mut rx) : (mpsc::UnboundedSender<RemotingCommand>, mpsc::UnboundedReceiver<RemotingCommand>) = mpsc::unbounded_channel();
+        let (tx, mut rx): (
+            mpsc::UnboundedSender<RemotingCommand>,
+            mpsc::UnboundedReceiver<RemotingCommand>,
+        ) = mpsc::unbounded_channel();
         let (registrations_tx, registrations_rx) = mpsc::unbounded_channel();
         let (receiver_shutdown_tx, receiver_shutdown_rx) = oneshot::channel();
         tokio::spawn(Box::pin(Receiver::new(
