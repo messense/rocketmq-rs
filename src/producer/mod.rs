@@ -21,6 +21,7 @@ use crate::protocol::{
 use crate::resolver::{HttpResolver, PassthroughResolver, Resolver};
 use crate::route::TopicPublishInfo;
 use selector::QueueSelector;
+use crate::Error::TopicNotExist;
 
 /// Message queue selector
 pub mod selector;
@@ -233,8 +234,8 @@ impl Producer {
             self.options.send_msg_timeout.clone(),
             self.client.invoke(&addr, cmd),
         )
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::TimedOut, e))??;
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::TimedOut, e))??;
         Self::process_send_response(&mq.broker_name, res, &[msg])
     }
 
@@ -356,7 +357,7 @@ impl Producer {
                 return Err(Error::ResponseError {
                     code: cmd.code(),
                     message: cmd.header.remark,
-                })
+                });
             }
         };
         let uniq_msg_id = msgs
@@ -397,21 +398,30 @@ impl Producer {
 
     async fn select_message_queue(&self, msg: &Message) -> Result<Option<MessageQueue>, Error> {
         let topic = msg.topic();
+        //fetch in local cache
         let info = self.inner.lock().publish_info.get(topic).cloned();
         let info = if info.is_some() {
             info
         } else {
-            let (route_data, changed) = self
+            // local cache is not exist, fetch from remote NameServer
+            let route_info_wrapper = self
                 .client
                 .name_server
                 .update_topic_route_info(topic)
-                .await?;
-            self.client.update_publish_info(topic, route_data, changed);
-            self.inner.lock().publish_info.get(topic).cloned()
+                .await;
+            match route_info_wrapper {
+                Ok((route_data, changed)) => {
+                    self.client.update_publish_info(topic, route_data, changed);
+                    self.inner.lock().publish_info.get(topic).cloned()
+                }
+                Err(TopicNotExist(_)) => None,
+                Err(e) => return Err(e)
+            }
         };
         let info = if info.is_some() {
             info
         } else {
+            // remote NameServer is also not exist, use default topic
             let (route_data, changed) = self
                 .client
                 .name_server
