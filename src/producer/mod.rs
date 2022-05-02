@@ -308,7 +308,7 @@ impl Producer {
                 topic: mq.topic.clone(),
                 queue_id: mq.queue_id,
                 sys_flag,
-                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::unix_epoch())
+                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::UNIX_EPOCH)
                     .whole_milliseconds() as i64,
                 flag: msg.flag,
                 properties: msg.dump_properties(),
@@ -326,7 +326,7 @@ impl Producer {
                 topic: mq.topic.clone(),
                 queue_id: mq.queue_id,
                 sys_flag,
-                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::unix_epoch())
+                born_timestamp: (OffsetDateTime::now_utc() - OffsetDateTime::UNIX_EPOCH)
                     .whole_milliseconds() as i64,
                 flag: msg.flag,
                 properties: msg.dump_properties(),
