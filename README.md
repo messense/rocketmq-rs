@@ -7,6 +7,8 @@
 
 Rust client for Apache RocketMQ.
 
+**Please use the official RocketMQ Rust client in [rocketmq-clients](https://github.com/apache/rocketmq-clients/tree/master/rust)**.
+
 ## Features
 
 `rocketmq-rs` is currently **working in progress**, it supports:
